@@ -18,6 +18,8 @@ st.set_page_config(page_title="Notícias do Agro", page_icon="🌾", layout="wid
 FEEDS_PADRAO = {
     "AgFeed": "https://agfeed.com.br/feed/",
     "Canal Rural": "https://www.canalrural.com.br/feed/",
+    "Compre Rural": "https://www.comprerural.com/feed/",
+    "BeefPoint": "https://www.beefpoint.com.br/feed/",
     # CNN nao tem feed so de agro; usamos o geral + filtro "apenas agro"
     "CNN Brasil": "https://www.cnnbrasil.com.br/feed/",
     "InfoMoney": "https://www.infomoney.com.br/feed/",
