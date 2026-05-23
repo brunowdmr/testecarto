@@ -22,6 +22,9 @@ FEEDS_PADRAO = {
     "CNN Brasil": "https://www.cnnbrasil.com.br/feed/",
     "InfoMoney": "https://www.infomoney.com.br/feed/",
     "Money Times": "https://www.moneytimes.com.br/feed/",
+    # Fontes regionais do Centro-Oeste (gerais; filtro de agro seleciona)
+    "Só Notícias (MT)": "https://www.sonoticias.com.br/feed/",
+    "Campo Grande News (MS)": "https://www.campograndenews.com.br/rss",
 }
 
 INTERVALO_PADRAO = 120  # segundos
@@ -39,8 +42,38 @@ TERMOS_AGRO = [
     "fertilizante\\w*", "defensivo\\w*", "commodit\\w*", "cepea", "esalq",
     "conab", "embrapa", "biocombustivel\\w*", "celulose", "frango\\w*",
     "suino\\w*", "produtor\\w* rural\\w*",
+    # politica do agro (para nao filtrar noticias politicas do setor)
+    "ruralist\\w*", "agrari\\w*", "incra", "florestal\\w*", "desmatament\\w*",
 ]
 _RE_AGRO = re.compile(r"\b(?:" + "|".join(TERMOS_AGRO) + r")\b")
+
+# Classificacao por categoria (badges e filtros). Um item pode ter varias.
+TERMOS_POLITICO = [
+    "politic\\w*", "ministr\\w*", "ministerio", "governo", "federal",
+    "deputad\\w*", "senador\\w*", "congresso", "camara", "senado", "bancada",
+    "ruralist\\w*", "frente parlamentar", "plano safra", "credito rural",
+    "decreto", "medida provisoria", "votac\\w*", "votad\\w*", "stf",
+    "supremo", "incra", "reforma agrari\\w*", "codigo florestal",
+    "planalto", "tarif\\w*", "imposto\\w*", "tributari\\w*", "embargo\\w*",
+    "mercosul", "acordo comercial", "lula", "presidente",
+]
+TERMOS_FINANCEIRO = [
+    "preco\\w*", "cotac\\w*", "dolar", "mercado\\w*", "exportac\\w*",
+    "importac\\w*", "bolsa", "commodit\\w*", "alta", "queda", "credito",
+    "financ\\w*", "investiment\\w*", "receita", "lucro", "faturament\\w*",
+    "pib", "bilhao", "bilhoes", "milhao", "milhoes", "juros", "inflac\\w*",
+    "safra", "balanca comercial", "r\\$", "us\\$",
+]
+TERMOS_CENTRO_OESTE = [
+    "mato grosso", "goias", "distrito federal", "brasilia", "cuiaba",
+    "campo grande", "goiania", "sorriso", "rondonopolis", "sinop",
+    "lucas do rio verde", "primavera do leste", "dourados", "varzea grande",
+    "anapolis", "rio verde", "centro-oeste", "centro oeste", "tangara",
+    "nova mutum", "sao gabriel do oeste", "chapadao",
+]
+_RE_POLITICO = re.compile(r"\b(?:" + "|".join(TERMOS_POLITICO) + r")\b")
+_RE_FINANCEIRO = re.compile(r"\b(?:" + "|".join(TERMOS_FINANCEIRO) + r")\b")
+_RE_CENTRO_OESTE = re.compile(r"\b(?:" + "|".join(TERMOS_CENTRO_OESTE) + r")\b")
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
@@ -192,6 +225,32 @@ def eh_do_agro(linha) -> bool:
     return bool(_RE_AGRO.search(conteudo))
 
 
+def eh_politico(linha) -> bool:
+    conteudo = normalizar(f"{linha['titulo']} {linha['resumo']}")
+    return bool(_RE_POLITICO.search(conteudo))
+
+
+def eh_financeiro(linha) -> bool:
+    conteudo = normalizar(f"{linha['titulo']} {linha['resumo']}")
+    return bool(_RE_FINANCEIRO.search(conteudo))
+
+
+def eh_centro_oeste(linha) -> bool:
+    conteudo = normalizar(f"{linha['titulo']} {linha['resumo']}")
+    return bool(_RE_CENTRO_OESTE.search(conteudo))
+
+
+def categorias(linha) -> list[str]:
+    cats = []
+    if eh_financeiro(linha):
+        cats.append("💰 Financeiro")
+    if eh_politico(linha):
+        cats.append("🏛️ Político")
+    if eh_centro_oeste(linha):
+        cats.append("📍 Centro-Oeste")
+    return cats
+
+
 def filtrar_agro(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
@@ -222,12 +281,20 @@ termo_busca = st.sidebar.text_input("🔎 Buscar por termo:", "")
 apenas_agro = st.sidebar.checkbox(
     "🌱 Apenas conteúdo do agro",
     value=True,
-    help="Filtra fontes de finanças gerais, mantendo só notícias do agronegócio.",
+    help="Mantém só matérias sobre o agro, inclusive nas fontes regionais e "
+    "gerais. Notícia geral (não-agro) do Centro-Oeste é descartada.",
+)
+
+cats_selecionadas = st.sidebar.multiselect(
+    "🏷️ Filtrar por categoria do agro:",
+    options=["💰 Financeiro", "🏛️ Político", "📍 Centro-Oeste"],
+    default=[],
+    help="Vazio = todas. As categorias sempre se aplicam dentro do agro.",
 )
 
 alertas_texto = st.sidebar.text_input(
     "🔔 Palavras-chave de alerta (separadas por vírgula):",
-    "soja, milho, dólar, safra",
+    "soja, milho, mato grosso, plano safra, bancada ruralista",
 )
 palavras_alerta = [normalizar(p) for p in alertas_texto.split(",") if p.strip()]
 
@@ -253,7 +320,8 @@ feeds = {nome: FEEDS_PADRAO[nome] for nome in fontes_selecionadas}
 if feed_extra.strip():
     feeds[feed_extra.strip()] = feed_extra.strip()
 
-st.title("🌾 Notícias Financeiras do Agro")
+st.title("🌾 Notícias do Agro")
+st.caption("Foco em agro financeiro, político e do Centro-Oeste.")
 st.caption(
     f"Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • "
     f"{'auto-refresh a cada ' + str(intervalo) + 's' if auto_atualizar else 'manual'}"
@@ -276,6 +344,16 @@ if apenas_agro:
     df = filtrar_agro(df)
     if df.empty:
         st.info("Nenhuma notícia do agro nas fontes selecionadas no momento.")
+        st.stop()
+
+if cats_selecionadas and not df.empty:
+    df = df[
+        df.apply(
+            lambda r: bool(set(categorias(r)) & set(cats_selecionadas)), axis=1
+        )
+    ].reset_index(drop=True)
+    if df.empty:
+        st.info("Nenhuma notícia do agro nas categorias selecionadas.")
         st.stop()
 
 # ------------------------
@@ -333,9 +411,15 @@ for _, linha in df_exibir.iterrows():
         publicado.strftime("%d/%m/%Y %H:%M") if pd.notna(publicado) else "—"
     )
 
+    cats = categorias(linha)
+    selo_cats = "  ".join(f"`{c}`" for c in cats)
+
     with st.container(border=True):
         st.markdown(f"### {linha['titulo']}{marcador}")
-        st.caption(f"**{linha['fonte']}** • {quando}")
+        legenda = f"**{linha['fonte']}** • {quando}"
+        if selo_cats:
+            legenda += f" • {selo_cats}"
+        st.caption(legenda)
         if linha["resumo"]:
             st.write(linha["resumo"], unsafe_allow_html=True)
         if linha["link"]:

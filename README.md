@@ -5,9 +5,9 @@ Aplicativos Streamlit.
 ## Apps
 
 - `testecartao.py` — dashboard de atingimento por carteira e consulta de cliente (MCI).
-- `agro_news.py` — busca de notícias financeiras do agro via feeds RSS, com
-  filtro por termo, palavras-chave de alerta e notificação em tempo real
-  (auto-refresh dentro do app).
+- `agro_news.py` — busca de notícias do agro via feeds RSS, com foco em agro
+  financeiro, político e do Centro-Oeste. Tem filtro por termo, por categoria,
+  palavras-chave de alerta e notificação em tempo real (auto-refresh).
 
 ## Como rodar
 
@@ -18,13 +18,17 @@ streamlit run agro_news.py
 
 ### Notícias do Agro
 
-- **Fontes:** feeds RSS públicos (AgFeed, Canal Rural, CNN Brasil, InfoMoney,
-  Money Times). A CNN não tem feed só de agro, então usamos o feed geral com o
-  filtro "apenas conteúdo do agro". É possível adicionar outro feed pela URL na
-  barra lateral.
+- **Fontes:** feeds RSS públicos nacionais (AgFeed, Canal Rural, CNN Brasil,
+  InfoMoney, Money Times) e regionais do Centro-Oeste (Só Notícias/MT, Campo
+  Grande News/MS). As fontes gerais e regionais não são só de agro, mas o
+  filtro "apenas conteúdo do agro" mantém somente as matérias do setor — ou
+  seja, é **agro do Centro-Oeste**, não notícia geral da região. É possível
+  adicionar outro feed pela URL na barra lateral.
+- **Apenas conteúdo do agro:** descarta o que não é do agronegócio (ligado por
+  padrão); funciona como o portão de todas as fontes.
+- **Categorias:** cada matéria é marcada como 💰 Financeiro, 🏛️ Político e/ou
+  📍 Centro-Oeste, e dá para filtrar por elas (sempre dentro do agro).
 - **Busca:** filtra as notícias por um termo.
-- **Apenas conteúdo do agro:** descarta matérias de finanças gerais que não
-  são do agronegócio (ligado por padrão).
 - **Alertas:** ao surgir uma notícia nova que contenha alguma das palavras-chave
   configuradas, o app exibe um toast e marca o item com 🔔 / 🆕.
 - **Tempo real:** com a atualização automática ligada, o app recarrega os feeds
