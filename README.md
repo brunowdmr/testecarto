@@ -19,11 +19,12 @@ streamlit run agro_news.py
 ### Notícias do Agro
 
 - **Fontes:** feeds RSS públicos nacionais (AgFeed, Canal Rural, CNN Brasil,
-  InfoMoney, Money Times) e regionais do Centro-Oeste (Só Notícias/MT, Campo
-  Grande News/MS). As fontes gerais e regionais não são só de agro, mas o
-  filtro "apenas conteúdo do agro" mantém somente as matérias do setor — ou
-  seja, é **agro do Centro-Oeste**, não notícia geral da região. É possível
-  adicionar outro feed pela URL na barra lateral.
+  InfoMoney, Money Times), regionais do Centro-Oeste (Só Notícias/MT, Campo
+  Grande News/MS) e legislativas (Agência Câmara, Agência Senado). As fontes
+  gerais, regionais e legislativas não são só de agro, mas o filtro "apenas
+  conteúdo do agro" mantém somente as matérias do setor — ou seja, é **agro do
+  Centro-Oeste / agro político**, não notícia geral. É possível adicionar outro
+  feed pela URL na barra lateral.
 - **Apenas conteúdo do agro:** descarta o que não é do agronegócio (ligado por
   padrão); funciona como o portão de todas as fontes.
 - **Categorias:** cada matéria é marcada como 💰 Financeiro, 🏛️ Político e/ou

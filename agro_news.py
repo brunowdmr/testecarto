@@ -25,6 +25,9 @@ FEEDS_PADRAO = {
     # Fontes regionais do Centro-Oeste (gerais; filtro de agro seleciona)
     "Só Notícias (MT)": "https://www.sonoticias.com.br/feed/",
     "Campo Grande News (MS)": "https://www.campograndenews.com.br/rss",
+    # Fontes legislativas (politica do agro; filtro de agro seleciona)
+    "Agência Câmara": "https://www.camara.leg.br/noticias/rss/ultimas-noticias",
+    "Agência Senado": "https://www12.senado.leg.br/noticias/rss.xml",
 }
 
 INTERVALO_PADRAO = 120  # segundos
