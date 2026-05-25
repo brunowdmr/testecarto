@@ -1,7 +1,7 @@
 import re
 import unicodedata
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 from email.utils import parsedate_to_datetime
 from xml.etree import ElementTree as ET
 
@@ -30,6 +30,16 @@ FEEDS_PADRAO = {
     # Fontes legislativas (politica do agro; filtro de agro seleciona)
     "Agência Câmara": "https://www.camara.leg.br/noticias/rss/ultimas-noticias",
     "Agência Senado": "https://www12.senado.leg.br/noticias/rss.xml",
+}
+
+# Canais de YouTube do agro (feed Atom oficial por channel_id)
+CANAIS_YOUTUBE = {
+    "Canal Rural": "UCcmbSgSpK0dQhw3IBaBGo-g",
+    "Notícias Agrícolas": "UCyHK5OwqtBksa0ItQRG1uVA",
+    "Scot Consultoria": "UCmSVgD1DOx5S8fLhfiEYH5g",
+    "Mais Soja": "UChW6r7uAYLjkjY5xxKF2hag",
+    "BeefPoint": "UCo61KGHutFR4PT4k-Ay02rg",
+    "Agro Resenha": "UCbLCNVcDUggrcJWmob8jCWg",
 }
 
 INTERVALO_PADRAO = 120  # segundos
@@ -180,6 +190,18 @@ def parse_feed(conteudo: bytes, fonte: str) -> list[dict]:
     return registros
 
 
+def _baixar(url: str) -> bytes:
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": USER_AGENT,
+            "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        return resp.read()
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def carregar_feeds(feeds: tuple[tuple[str, str], ...]) -> pd.DataFrame:
     """Busca e consolida as entradas dos feeds selecionados."""
@@ -187,16 +209,7 @@ def carregar_feeds(feeds: tuple[tuple[str, str], ...]) -> pd.DataFrame:
     erros = []
     for nome, url in feeds:
         try:
-            req = urllib.request.Request(
-                url,
-                headers={
-                    "User-Agent": USER_AGENT,
-                    "Accept": "application/rss+xml, application/xml, text/xml, */*",
-                },
-            )
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                conteudo = resp.read()
-            registros.extend(parse_feed(conteudo, nome))
+            registros.extend(parse_feed(_baixar(url), nome))
         except Exception as exc:  # rede, timeout, etc.
             erros.append(f"{nome}: {exc}")
 
@@ -206,6 +219,29 @@ def carregar_feeds(feeds: tuple[tuple[str, str], ...]) -> pd.DataFrame:
         df = df.sort_values("publicado", ascending=False, na_position="last")
         df = df.reset_index(drop=True)
     return df, erros
+
+
+@st.cache_data(ttl=1800, show_spinner=False)
+def carregar_youtube(canais: tuple[tuple[str, str], ...]):
+    """Busca os videos recentes dos canais (feed Atom do YouTube)."""
+    registros = []
+    erros = []
+    for nome, canal_id in canais:
+        url = f"https://www.youtube.com/feeds/videos.xml?channel_id={canal_id}"
+        try:
+            registros.extend(parse_feed(_baixar(url), nome))
+        except Exception as exc:
+            erros.append(f"{nome}: {exc}")
+
+    vistos = set()
+    unicos = []
+    for r in registros:
+        if r["id"] in vistos:
+            continue
+        vistos.add(r["id"])
+        unicos.append(r)
+    unicos.sort(key=lambda r: r["publicado"] or datetime.min, reverse=True)
+    return unicos, erros
 
 
 def filtrar(df: pd.DataFrame, termo: str) -> pd.DataFrame:
@@ -310,6 +346,7 @@ intervalo = st.sidebar.slider(
 
 if st.sidebar.button("🔄 Atualizar agora"):
     carregar_feeds.clear()
+    carregar_youtube.clear()
     st.rerun()
 
 # ------------------------
@@ -319,113 +356,187 @@ if auto_atualizar:
     st_autorefresh(interval=intervalo * 1000, key="auto_refresh_agro")
 
 # ------------------------
-# Carregamento dos dados
+# Aba 1 - Noticias (RSS)
 # ------------------------
-feeds = {nome: FEEDS_PADRAO[nome] for nome in fontes_selecionadas}
-if feed_extra.strip():
-    feeds[feed_extra.strip()] = feed_extra.strip()
+def render_noticias():
+    st.caption("Foco em agro financeiro, político e do Centro-Oeste.")
 
-st.title("🌾 Notícias do Agro")
-st.caption("Foco em agro financeiro, político e do Centro-Oeste.")
+    feeds = {nome: FEEDS_PADRAO[nome] for nome in fontes_selecionadas}
+    if feed_extra.strip():
+        feeds[feed_extra.strip()] = feed_extra.strip()
+
+    if not feeds:
+        st.info("Selecione pelo menos uma fonte na barra lateral.")
+        return
+
+    df, erros = carregar_feeds(tuple(feeds.items()))
+
+    if erros:
+        st.warning(
+            "Algumas fontes falharam:\n\n" + "\n".join(f"- {e}" for e in erros)
+        )
+
+    if df.empty:
+        st.error("Nenhuma notícia carregada. Verifique a conexão ou as fontes.")
+        return
+
+    if apenas_agro:
+        df = filtrar_agro(df)
+        if df.empty:
+            st.info("Nenhuma notícia do agro nas fontes selecionadas no momento.")
+            return
+
+    if cats_selecionadas and not df.empty:
+        df = df[
+            df.apply(
+                lambda r: bool(set(categorias(r)) & set(cats_selecionadas)),
+                axis=1,
+            )
+        ].reset_index(drop=True)
+        if df.empty:
+            st.info("Nenhuma notícia do agro nas categorias selecionadas.")
+            return
+
+    # Deteccao de novidades para notificacao
+    ids_atuais = set(df["id"])
+    primeira_carga = len(st.session_state.ids_vistos) == 0
+    novos_ids = ids_atuais - st.session_state.ids_vistos
+
+    novos_relevantes = df[
+        df["id"].isin(novos_ids)
+        & df.apply(lambda r: casa_alerta(r, palavras_alerta), axis=1)
+    ]
+
+    if not primeira_carga and not novos_relevantes.empty:
+        for _, linha in novos_relevantes.iterrows():
+            st.toast(f"🔔 {linha['fonte']}: {linha['titulo']}", icon="🌾")
+        st.success(
+            f"{len(novos_relevantes)} nova(s) notícia(s) relevante(s) detectada(s)!"
+        )
+
+    st.session_state.ids_vistos = ids_atuais
+
+    # Filtro de busca e metricas
+    df_exibir = filtrar(df, termo_busca)
+
+    col_a, col_b, col_c = st.columns(3)
+    col_a.metric("Notícias carregadas", len(df))
+    col_b.metric("Após filtro", len(df_exibir))
+    col_c.metric("Alertas ativos", len(palavras_alerta))
+
+    st.divider()
+
+    if df_exibir.empty:
+        st.info("Nenhuma notícia corresponde ao termo buscado.")
+        return
+
+    for _, linha in df_exibir.iterrows():
+        destaque = casa_alerta(linha, palavras_alerta)
+        eh_novo = linha["id"] in novos_ids and not primeira_carga
+
+        marcador = ""
+        if eh_novo:
+            marcador += " 🆕"
+        if destaque:
+            marcador += " 🔔"
+
+        publicado = linha["publicado"]
+        quando = (
+            publicado.strftime("%d/%m/%Y %H:%M") if pd.notna(publicado) else "—"
+        )
+
+        selo_cats = "  ".join(f"`{c}`" for c in categorias(linha))
+
+        with st.container(border=True):
+            st.markdown(f"### {linha['titulo']}{marcador}")
+            legenda = f"**{linha['fonte']}** • {quando}"
+            if selo_cats:
+                legenda += f" • {selo_cats}"
+            st.caption(legenda)
+            if linha["resumo"]:
+                st.write(linha["resumo"], unsafe_allow_html=True)
+            if linha["link"]:
+                st.markdown(f"[Ler matéria completa →]({linha['link']})")
+
+
+# ------------------------
+# Aba 2 - YouTube
+# ------------------------
+PERIODOS = {
+    "Últimas 24h": 1,
+    "Últimos 3 dias": 3,
+    "Últimos 7 dias": 7,
+    "Últimos 30 dias": 30,
+}
+
+
+def render_youtube():
+    st.caption("Vídeos recentes dos canais de agro no YouTube.")
+
+    canais_sel = st.multiselect(
+        "Canais:",
+        options=list(CANAIS_YOUTUBE.keys()),
+        default=list(CANAIS_YOUTUBE.keys()),
+        key="yt_canais",
+    )
+    col1, col2 = st.columns([1, 2])
+    periodo = col1.selectbox(
+        "Período:", options=list(PERIODOS.keys()), index=2, key="yt_periodo"
+    )
+    busca_yt = col2.text_input("🔎 Buscar no título:", "", key="yt_busca")
+
+    if not canais_sel:
+        st.info("Selecione pelo menos um canal.")
+        return
+
+    canais = tuple((nome, CANAIS_YOUTUBE[nome]) for nome in canais_sel)
+    videos, erros = carregar_youtube(canais)
+
+    if erros:
+        st.warning(
+            "Alguns canais falharam:\n\n" + "\n".join(f"- {e}" for e in erros)
+        )
+
+    if not videos:
+        st.error("Nenhum vídeo carregado. Tente novamente em instantes.")
+        return
+
+    limite = datetime.now() - timedelta(days=PERIODOS[periodo])
+    recentes = [v for v in videos if v["publicado"] and v["publicado"] >= limite]
+
+    if busca_yt.strip():
+        alvo = normalizar(busca_yt)
+        recentes = [v for v in recentes if alvo in normalizar(v["titulo"])]
+
+    st.caption(f"{len(recentes)} vídeo(s) em «{periodo.lower()}».")
+    st.divider()
+
+    if not recentes:
+        st.info("Nenhum vídeo novo no período selecionado. 🌱")
+        return
+
+    for v in recentes:
+        quando = (
+            v["publicado"].strftime("%d/%m/%Y %H:%M") if v["publicado"] else "—"
+        )
+        st.markdown(f"### {v['titulo']}")
+        st.caption(f"📺 **{v['fonte']}** • {quando}")
+        if v["link"]:
+            st.video(v["link"])
+        st.divider()
+
+
+# ------------------------
+# Layout em abas
+# ------------------------
+st.title("🌾 Painel do Agro")
 st.caption(
     f"Última atualização: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')} • "
     f"{'auto-refresh a cada ' + str(intervalo) + 's' if auto_atualizar else 'manual'}"
 )
 
-if not feeds:
-    st.info("Selecione pelo menos uma fonte na barra lateral.")
-    st.stop()
-
-df, erros = carregar_feeds(tuple(feeds.items()))
-
-if erros:
-    st.warning("Algumas fontes falharam:\n\n" + "\n".join(f"- {e}" for e in erros))
-
-if df.empty:
-    st.error("Nenhuma notícia carregada. Verifique a conexão ou as fontes.")
-    st.stop()
-
-if apenas_agro:
-    df = filtrar_agro(df)
-    if df.empty:
-        st.info("Nenhuma notícia do agro nas fontes selecionadas no momento.")
-        st.stop()
-
-if cats_selecionadas and not df.empty:
-    df = df[
-        df.apply(
-            lambda r: bool(set(categorias(r)) & set(cats_selecionadas)), axis=1
-        )
-    ].reset_index(drop=True)
-    if df.empty:
-        st.info("Nenhuma notícia do agro nas categorias selecionadas.")
-        st.stop()
-
-# ------------------------
-# Deteccao de novidades para notificacao
-# ------------------------
-ids_atuais = set(df["id"])
-primeira_carga = len(st.session_state.ids_vistos) == 0
-novos_ids = ids_atuais - st.session_state.ids_vistos
-
-novos_relevantes = df[
-    df["id"].isin(novos_ids)
-    & df.apply(lambda r: casa_alerta(r, palavras_alerta), axis=1)
-]
-
-if not primeira_carga and not novos_relevantes.empty:
-    for _, linha in novos_relevantes.iterrows():
-        st.toast(f"🔔 {linha['fonte']}: {linha['titulo']}", icon="🌾")
-    st.success(
-        f"{len(novos_relevantes)} nova(s) notícia(s) relevante(s) detectada(s)!"
-    )
-
-st.session_state.ids_vistos = ids_atuais
-
-# ------------------------
-# Aplica filtro de busca e metricas
-# ------------------------
-df_exibir = filtrar(df, termo_busca)
-
-col_a, col_b, col_c = st.columns(3)
-col_a.metric("Notícias carregadas", len(df))
-col_b.metric("Após filtro", len(df_exibir))
-col_c.metric("Alertas ativos", len(palavras_alerta))
-
-st.divider()
-
-if df_exibir.empty:
-    st.info("Nenhuma notícia corresponde ao termo buscado.")
-    st.stop()
-
-# ------------------------
-# Listagem das noticias
-# ------------------------
-for _, linha in df_exibir.iterrows():
-    destaque = casa_alerta(linha, palavras_alerta)
-    eh_novo = linha["id"] in novos_ids and not primeira_carga
-
-    marcador = ""
-    if eh_novo:
-        marcador += " 🆕"
-    if destaque:
-        marcador += " 🔔"
-
-    publicado = linha["publicado"]
-    quando = (
-        publicado.strftime("%d/%m/%Y %H:%M") if pd.notna(publicado) else "—"
-    )
-
-    cats = categorias(linha)
-    selo_cats = "  ".join(f"`{c}`" for c in cats)
-
-    with st.container(border=True):
-        st.markdown(f"### {linha['titulo']}{marcador}")
-        legenda = f"**{linha['fonte']}** • {quando}"
-        if selo_cats:
-            legenda += f" • {selo_cats}"
-        st.caption(legenda)
-        if linha["resumo"]:
-            st.write(linha["resumo"], unsafe_allow_html=True)
-        if linha["link"]:
-            st.markdown(f"[Ler matéria completa →]({linha['link']})")
+aba_noticias, aba_youtube = st.tabs(["📰 Notícias (RSS)", "📺 YouTube"])
+with aba_noticias:
+    render_noticias()
+with aba_youtube:
+    render_youtube()

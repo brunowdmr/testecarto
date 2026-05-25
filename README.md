@@ -5,9 +5,10 @@ Aplicativos Streamlit.
 ## Apps
 
 - `testecartao.py` — dashboard de atingimento por carteira e consulta de cliente (MCI).
-- `agro_news.py` — busca de notícias do agro via feeds RSS, com foco em agro
-  financeiro, político e do Centro-Oeste. Tem filtro por termo, por categoria,
-  palavras-chave de alerta e notificação em tempo real (auto-refresh).
+- `agro_news.py` — painel do agro com duas abas: **Notícias (RSS)**, com foco em
+  agro financeiro, político e do Centro-Oeste (filtro por termo, por categoria,
+  palavras-chave de alerta e notificação em tempo real via auto-refresh); e
+  **YouTube**, com os vídeos recentes de canais de agro.
 
 ## Como rodar
 
@@ -35,3 +36,11 @@ streamlit run agro_news.py
   configuradas, o app exibe um toast e marca o item com 🔔 / 🆕.
 - **Tempo real:** com a atualização automática ligada, o app recarrega os feeds
   no intervalo escolhido e destaca as novidades.
+
+### Aba YouTube
+
+- **Canais:** feeds Atom oficiais do YouTube por `channel_id` (Canal Rural,
+  Notícias Agrícolas, Scot Consultoria, Mais Soja, BeefPoint, Agro Resenha).
+- **Período:** filtra os vídeos por últimas 24h / 3 / 7 / 30 dias.
+- **Busca:** filtra os vídeos por termo no título.
+- Os vídeos tocam direto na página (player do YouTube embutido).
