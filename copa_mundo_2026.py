@@ -166,6 +166,88 @@ RESULTADOS = {
     ("Austrália", "Turquia"): (2, 0),
 }
 
+# ----------------------------------------------------------------------------
+# Horário de cada jogo (horário de Brasília — BRT, UTC-3)
+# Jogos entre 00h e 04h são de madrugada (dia seguinte ao da rodada).
+# ----------------------------------------------------------------------------
+HORARIOS = {
+    # ----- Rodada 1 -----
+    ("México", "África do Sul"): "18h00",
+    ("Coreia do Sul", "Tchéquia"): "01h00",
+    ("Canadá", "Bósnia"): "18h00",
+    ("EUA", "Paraguai"): "00h00",
+    ("Catar", "Suíça"): "18h00",
+    ("Brasil", "Marrocos"): "19h00",
+    ("Haiti", "Escócia"): "22h00",
+    ("Austrália", "Turquia"): "03h00",
+    ("Alemanha", "Curaçao"): "16h00",
+    ("Holanda", "Japão"): "19h00",
+    ("Costa do Marfim", "Equador"): "20h00",
+    ("Suécia", "Tunísia"): "23h00",
+    ("Espanha", "Cabo Verde"): "15h00",
+    ("Bélgica", "Egito"): "18h00",
+    ("Arábia Saudita", "Uruguai"): "21h00",
+    ("Irã", "Nova Zelândia"): "22h00",
+    ("França", "Senegal"): "18h00",
+    ("Iraque", "Noruega"): "21h00",
+    ("Argentina", "Argélia"): "00h00",
+    ("Áustria", "Jordânia"): "03h00",
+    ("Portugal", "RD Congo"): "16h00",
+    ("Inglaterra", "Croácia"): "19h00",
+    ("Gana", "Panamá"): "22h00",
+    ("Uzbequistão", "Colômbia"): "23h00",
+    # ----- Rodada 2 -----
+    ("Tchéquia", "África do Sul"): "15h00",
+    ("Suíça", "Bósnia"): "18h00",
+    ("Canadá", "Catar"): "21h00",
+    ("México", "Coreia do Sul"): "00h00",
+    ("Escócia", "Marrocos"): "21h00",
+    ("EUA", "Austrália"): "18h00",
+    ("Brasil", "Haiti"): "23h30",
+    ("Turquia", "Paraguai"): "02h00",
+    ("Holanda", "Suécia"): "16h00",
+    ("Alemanha", "Costa do Marfim"): "19h00",
+    ("Equador", "Curaçao"): "23h00",
+    ("Tunísia", "Japão"): "03h00",
+    ("Espanha", "Arábia Saudita"): "15h00",
+    ("Bélgica", "Irã"): "18h00",
+    ("Uruguai", "Cabo Verde"): "21h00",
+    ("Nova Zelândia", "Egito"): "22h00",
+    ("Argentina", "Áustria"): "16h00",
+    ("França", "Iraque"): "20h00",
+    ("Noruega", "Senegal"): "23h00",
+    ("Jordânia", "Argélia"): "02h00",
+    ("Portugal", "Uzbequistão"): "16h00",
+    ("Inglaterra", "Gana"): "19h00",
+    ("Panamá", "Croácia"): "22h00",
+    ("Colômbia", "RD Congo"): "23h00",
+    # ----- Rodada 3 -----
+    ("Suíça", "Canadá"): "18h00",
+    ("Bósnia", "Catar"): "18h00",
+    ("Escócia", "Brasil"): "21h00",
+    ("Marrocos", "Haiti"): "21h00",
+    ("Tchéquia", "México"): "22h00",
+    ("África do Sul", "Coreia do Sul"): "22h00",
+    ("Equador", "Alemanha"): "19h00",
+    ("Curaçao", "Costa do Marfim"): "19h00",
+    ("Japão", "Suécia"): "22h00",
+    ("Tunísia", "Holanda"): "22h00",
+    ("Turquia", "EUA"): "23h00",
+    ("Paraguai", "Austrália"): "23h00",
+    ("Noruega", "França"): "18h00",
+    ("Senegal", "Iraque"): "18h00",
+    ("Cabo Verde", "Arábia Saudita"): "23h00",
+    ("Uruguai", "Espanha"): "23h00",
+    ("Egito", "Irã"): "02h00",
+    ("Nova Zelândia", "Bélgica"): "02h00",
+    ("Panamá", "Inglaterra"): "20h00",
+    ("Croácia", "Gana"): "20h00",
+    ("Colômbia", "Portugal"): "22h30",
+    ("RD Congo", "Uzbequistão"): "22h30",
+    ("Argélia", "Áustria"): "23h00",
+    ("Jordânia", "Argentina"): "23h00",
+}
+
 # Sedes por país (para indicar bandeira do país-sede)
 SEDE_PAIS = {
     "Cidade do México": "🇲🇽 México", "Guadalajara": "🇲🇽 México", "Monterrey": "🇲🇽 México",
@@ -301,6 +383,27 @@ def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
     return df
 
 
+def hora_jogo(casa: str, fora: str) -> str:
+    """Horário de Brasília do jogo (string 'HHhMM')."""
+    return HORARIOS.get((casa, fora), "--h--")
+
+
+def _chave_horario(casa: str, fora: str) -> int:
+    """Chave para ordenar jogos do dia em ordem cronológica (madrugada por último)."""
+    h = hora_jogo(casa, fora)
+    try:
+        hh, mm = int(h[:2]), int(h[3:5])
+    except ValueError:
+        return 9999
+    # Jogos de madrugada (00h-05h) acontecem depois dos da noite do mesmo dia
+    return hh * 60 + mm + (24 * 60 if hh < 6 else 0)
+
+
+def eh_madrugada(casa: str, fora: str) -> bool:
+    h = hora_jogo(casa, fora)
+    return h[:2].isdigit() and int(h[:2]) < 6
+
+
 def status_jogo(data_str: str, tem_resultado: bool, hoje: date):
     d = datetime.strptime(data_str, "%Y-%m-%d").date()
     if tem_resultado:
@@ -346,7 +449,8 @@ st.sidebar.markdown(
 # Cabeçalho
 # ----------------------------------------------------------------------------
 st.title("🏆 Copa do Mundo FIFA 2026")
-st.caption("Estados Unidos 🇺🇸 · Canadá 🇨🇦 · México 🇲🇽  —  Fase de grupos (11 a 27 de junho)")
+st.caption("Estados Unidos 🇺🇸 · Canadá 🇨🇦 · México 🇲🇽  —  Fase de grupos (11 a 27 de junho)  "
+           "·  🕒 Horários de Brasília (BRT) · 🌙 = madrugada")
 
 resultados = obter_resultados(usar_api, api_key)
 agora = datetime.now(BR_TZ)
@@ -387,6 +491,7 @@ with tab_jogos:
         if not jogos_dia:
             continue
 
+        jogos_dia.sort(key=lambda x: _chave_horario(x[1], x[2]))
         marcador = " 🔴 HOJE" if datetime.strptime(d, "%Y-%m-%d").date() == hoje else ""
         st.subheader(f"📆 {data_formatada(d)}{marcador}")
 
@@ -401,8 +506,11 @@ with tab_jogos:
 
             canais = " · ".join(f"`{c}`" for c in canais_do_jogo(casa, fora))
             sede = SEDE_PAIS.get(cidade, "")
+            hora = hora_jogo(casa, fora)
+            hora_txt = f"🕒 **{hora}**" + (" 🌙" if eh_madrugada(casa, fora) else "")
 
-            l1, l2, l3, l4 = st.columns([3, 1, 3, 3])
+            c_hora, l1, l2, l3, l4 = st.columns([1.4, 3, 1, 3, 2.6])
+            c_hora.markdown(hora_txt)
             l1.markdown(f"<div style='text-align:right'>{flag(casa)} **{casa}**</div>",
                         unsafe_allow_html=True)
             l2.markdown(f"<div style='text-align:center'>{placar}</div>",
