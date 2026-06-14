@@ -532,11 +532,15 @@ CSS = """
 .hero-sub{position:relative; color:#c8d4f0; font:500 15px/1.4 'Rajdhani',sans-serif; letter-spacing:.4px;}
 /* Stats */
 .stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:2px 0 8px;}
+.stat-link{text-decoration:none; color:inherit; display:block;}
+.stat-link:hover{text-decoration:none;}
 .stat{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line);
-  border-radius:16px; padding:14px 16px;}
+  border-radius:16px; padding:14px 16px; cursor:pointer; transition:.15s; height:100%;}
+.stat:hover{transform:translateY(-2px); border-color:rgba(34,211,238,.45);}
 .stat .v{font:800 26px/1 'Orbitron',sans-serif; color:var(--txt);}
 .stat .l{color:var(--muted); font:600 11px/1 'Rajdhani',sans-serif; letter-spacing:1.5px; text-transform:uppercase; margin-top:7px;}
 .stat.live{border-color:rgba(255,59,92,.45);} .stat.live .v{color:var(--red);}
+.stat.live:hover{border-color:rgba(255,59,92,.8);}
 /* Day header */
 .dayhead{display:flex; align-items:center; gap:11px; margin:24px 0 13px;}
 .dayhead .dot{width:10px; height:10px; border-radius:50%; background:var(--cyan); box-shadow:0 0 13px var(--cyan);}
@@ -681,6 +685,22 @@ hoje = agora.date()
 n_encerrados = sum(1 for v in resultados.values() if v[2] == "post")
 n_ao_vivo = sum(1 for v in resultados.values() if v[2] == "in")
 
+# Jogos em andamento (usados nos KPIs e na seção de destaque)
+jogos_ao_vivo = [(d, g, c, f, ci) for d, g, c, f, ci in JOGOS
+                 if (r := resultados.get((c, f))) and r[2] == "in"]
+
+
+def _busca_google(termo):
+    return "https://www.google.com/search?q=" + urllib.parse.quote_plus(termo)
+
+
+# Destino do KPI "Ao vivo": vai direto ao jogo em andamento
+if len(jogos_ao_vivo) == 1:
+    _, _, _c, _f, _ = jogos_ao_vivo[0]
+    url_ao_vivo = _busca_google(f"{_c} x {_f} copa do mundo 2026 ao vivo")
+else:
+    url_ao_vivo = _busca_google("copa do mundo 2026 jogos ao vivo")
+
 st.markdown(
     '<div class="hero"><span class="hero-badge">FIFA WORLD CUP · COPA TECH</span>'
     '<h1>COPA DO MUNDO <span>2026</span></h1>'
@@ -689,23 +709,28 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
+def _kpi(valor, label, href, extra=""):
+    return (f'<a class="stat-link" href="{href}" target="_blank" rel="noopener">'
+            f'<div class="stat {extra}"><div class="v">{valor}</div>'
+            f'<div class="l">{label} ↗</div></div></a>')
+
+
 st.markdown(
-    f'<div class="stats">'
-    f'<div class="stat"><div class="v">{len(JOGOS)}</div><div class="l">Jogos</div></div>'
-    f'<div class="stat"><div class="v">{n_encerrados}</div><div class="l">Encerrados</div></div>'
-    f'<div class="stat live"><div class="v">{n_ao_vivo}</div><div class="l">Ao vivo</div></div>'
-    f'<div class="stat"><div class="v">{agora:%H:%M}</div><div class="l">Atualizado</div></div>'
-    f'</div>',
+    '<div class="stats">'
+    + _kpi(len(JOGOS), "Jogos", _busca_google("copa do mundo 2026 tabela de jogos"))
+    + _kpi(n_encerrados, "Resultados", _busca_google("copa do mundo 2026 resultados"))
+    + _kpi(n_ao_vivo, "Ao vivo", url_ao_vivo, extra="live")
+    + _kpi(f"{agora:%H:%M}", "Atualizado", _busca_google("copa do mundo 2026 jogos de hoje"))
+    + '</div>',
     unsafe_allow_html=True,
 )
 
 if usar_espn:
     st.caption("🟢 Placares ao vivo via feed público da ESPN (mesmos dados dos cards do Google) · "
-               "atualização automática a cada 30s · 👆 toque num jogo para abrir os detalhes")
+               "atualização automática a cada 30s · 👆 toque num jogo ou KPI para abrir")
 
 # Seção "AO VIVO AGORA" — destaque para jogos em andamento
-jogos_ao_vivo = [(d, g, c, f, ci) for d, g, c, f, ci in JOGOS
-                 if (r := resultados.get((c, f))) and r[2] == "in"]
 if jogos_ao_vivo:
     st.markdown('<div class="livebar">Ao vivo agora</div>', unsafe_allow_html=True)
     cards_live = "".join(
