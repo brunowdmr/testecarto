@@ -473,28 +473,194 @@ st.sidebar.markdown(
 )
 
 # ----------------------------------------------------------------------------
+# Visual "Copa Tech" (CSS)
+# ----------------------------------------------------------------------------
+CSS = """
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap');
+:root{
+  --bg:#070b16; --panel:#0f1626; --panel2:#131c30;
+  --line:rgba(120,160,255,.14); --txt:#e8eefc; --muted:#8a98b8;
+  --cyan:#22d3ee; --green:#22e07a; --red:#ff3b5c; --amber:#ffb020; --violet:#7c5cff;
+}
+.stApp{
+  background:
+    radial-gradient(1200px 600px at 12% -12%, rgba(124,92,255,.20), transparent 60%),
+    radial-gradient(1000px 520px at 112% -2%, rgba(34,211,238,.16), transparent 55%),
+    var(--bg);
+}
+.block-container{padding-top:1.1rem; max-width:1220px;}
+/* Hero */
+.hero{position:relative; border-radius:24px; padding:28px 30px; margin:2px 0 16px;
+  background:linear-gradient(120deg, rgba(124,92,255,.30), rgba(34,211,238,.14) 55%, rgba(34,224,122,.12));
+  border:1px solid var(--line); overflow:hidden;}
+.hero:before{content:""; position:absolute; inset:0;
+  background:repeating-linear-gradient(90deg, rgba(255,255,255,.045) 0 2px, transparent 2px 24px); opacity:.6;}
+.hero-badge{position:relative; display:inline-block; font:700 12px/1 'Rajdhani',sans-serif; letter-spacing:3px;
+  color:#06101f; background:linear-gradient(90deg,var(--cyan),var(--green)); padding:7px 13px; border-radius:999px;}
+.hero h1{position:relative; font:800 46px/1 'Orbitron',sans-serif; margin:16px 0 8px; letter-spacing:2px;
+  background:linear-gradient(90deg,#ffffff,#bcd3ff); -webkit-background-clip:text; background-clip:text; color:transparent;}
+.hero h1 span{color:var(--cyan); -webkit-text-fill-color:var(--cyan);}
+.hero-sub{position:relative; color:#c8d4f0; font:500 15px/1.4 'Rajdhani',sans-serif; letter-spacing:.4px;}
+/* Stats */
+.stats{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin:2px 0 8px;}
+.stat{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line);
+  border-radius:16px; padding:14px 16px;}
+.stat .v{font:800 26px/1 'Orbitron',sans-serif; color:var(--txt);}
+.stat .l{color:var(--muted); font:600 11px/1 'Rajdhani',sans-serif; letter-spacing:1.5px; text-transform:uppercase; margin-top:7px;}
+.stat.live{border-color:rgba(255,59,92,.45);} .stat.live .v{color:var(--red);}
+/* Day header */
+.dayhead{display:flex; align-items:center; gap:11px; margin:24px 0 13px;}
+.dayhead .dot{width:10px; height:10px; border-radius:50%; background:var(--cyan); box-shadow:0 0 13px var(--cyan);}
+.dayhead .d{font:700 18px/1 'Rajdhani',sans-serif; letter-spacing:1.5px; color:var(--txt); text-transform:uppercase;}
+.dayhead .today{font:700 11px/1 'Rajdhani',sans-serif; letter-spacing:1px; color:#06101f; background:var(--amber); padding:5px 9px; border-radius:999px;}
+.day-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(330px,1fr)); gap:14px;}
+/* Match card */
+.match{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line);
+  border-radius:18px; padding:14px 16px; transition:.16s; position:relative; overflow:hidden;}
+.match:hover{transform:translateY(-3px); border-color:rgba(34,211,238,.45); box-shadow:0 12px 30px rgba(0,0,0,.45);}
+.match.live{border-color:rgba(255,59,92,.55); box-shadow:0 0 0 1px rgba(255,59,92,.25), 0 8px 26px rgba(255,59,92,.14);}
+.match.live:before{content:""; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--red);}
+.m-head{display:flex; justify-content:space-between; align-items:center; font:600 12px/1 'Rajdhani',sans-serif; color:var(--muted); letter-spacing:.5px;}
+.m-status{font-weight:700; padding:4px 9px; border-radius:999px; font-size:11px; letter-spacing:.5px;}
+.s-live{color:#fff; background:var(--red); animation:pulse 1.2s infinite;}
+.s-post{color:var(--green); background:rgba(34,224,122,.14);}
+.s-today{color:var(--amber); background:rgba(255,176,32,.14);}
+.s-pre{color:var(--muted); background:rgba(138,152,184,.12);}
+@keyframes pulse{0%,100%{opacity:1} 50%{opacity:.4}}
+.m-body{display:grid; grid-template-columns:1fr auto 1fr; align-items:center; gap:8px; margin:13px 0;}
+.m-team{display:flex; flex-direction:column; align-items:center; gap:7px;}
+.m-flag{font-size:30px; line-height:1;}
+.m-name{font:700 14px/1.15 'Rajdhani',sans-serif; text-align:center; color:var(--txt); letter-spacing:.3px;}
+.m-score{font:800 30px/1 'Orbitron',sans-serif; color:var(--txt); min-width:84px; text-align:center;}
+.m-score.live{color:var(--red);}
+.m-score .sep{color:var(--muted); margin:0 5px;}
+.m-score .vs{font:700 15px/1 'Rajdhani',sans-serif; color:var(--muted); letter-spacing:2px;}
+.m-foot{display:flex; justify-content:space-between; align-items:center; gap:8px; border-top:1px solid var(--line); padding-top:10px; flex-wrap:wrap;}
+.m-venue{font:500 11px/1.3 'Rajdhani',sans-serif; color:var(--muted); letter-spacing:.3px;}
+.chip{font:700 10px/1 'Rajdhani',sans-serif; letter-spacing:.5px; padding:5px 9px; border-radius:999px; margin-left:5px; display:inline-block;}
+.chip-globo{background:rgba(34,211,238,.16); color:var(--cyan);}
+.chip-sportv{background:rgba(124,92,255,.20); color:#bca9ff;}
+.chip-caze{background:rgba(34,224,122,.16); color:var(--green);}
+/* Standings */
+.group-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(345px,1fr)); gap:16px;}
+.grp{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line); border-radius:18px; overflow:hidden;}
+.grp-head{font:700 15px/1 'Rajdhani',sans-serif; letter-spacing:2px; padding:12px 16px; color:#06101f;
+  background:linear-gradient(90deg,var(--cyan),var(--green)); text-transform:uppercase;}
+.tbl{width:100%; border-collapse:collapse; font:600 13px/1 'Rajdhani',sans-serif;}
+.tbl th{color:var(--muted); font-weight:600; text-align:center; padding:9px 4px; font-size:11px; letter-spacing:.5px; border-bottom:1px solid var(--line);}
+.tbl th.l, .tbl td.l{text-align:left; padding-left:12px;}
+.tbl td{text-align:center; padding:10px 4px; border-bottom:1px solid rgba(255,255,255,.04); color:var(--txt);}
+.tbl tr:last-child td{border-bottom:none;}
+.tbl .pos{font-weight:800; width:30px;}
+.tbl tr.q{background:linear-gradient(90deg, rgba(34,224,122,.09), transparent);}
+.tbl tr.q td:first-child{box-shadow:inset 3px 0 var(--green);}
+.tbl tr.q .pos{color:var(--green);}
+.tbl tr.p td:first-child{box-shadow:inset 3px 0 var(--amber);}
+.tbl tr.p .pos{color:var(--amber);}
+.tbl .pts{font-weight:800; color:var(--cyan);}
+.legend{color:var(--muted); font:500 12px/1.5 'Rajdhani',sans-serif; margin:4px 0 12px; letter-spacing:.3px;}
+.legend b{color:var(--green);} .legend i{color:var(--amber); font-style:normal;}
+/* Tabs */
+.stTabs [data-baseweb="tab-list"]{gap:8px;}
+.stTabs [data-baseweb="tab"]{background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:6px 14px;}
+.stTabs [aria-selected="true"]{background:linear-gradient(90deg, rgba(34,211,238,.22), rgba(34,224,122,.15)); border-color:rgba(34,211,238,.5);}
+</style>
+"""
+st.markdown(CSS, unsafe_allow_html=True)
+
+CHIP_CLS = {"Globo": "chip-globo", "SporTV": "chip-sportv", "CazéTV": "chip-caze"}
+
+
+def card_jogo_html(d, g, casa, fora, cidade, res, hoje):
+    dt = datetime.strptime(d, "%Y-%m-%d").date()
+    estado = res[2] if res else None
+    if estado == "in":
+        stxt, scls = "🔴 AO VIVO", "s-live"
+    elif estado == "post":
+        stxt, scls = "ENCERRADO", "s-post"
+    elif dt == hoje:
+        stxt, scls = "HOJE", "s-today"
+    elif dt < hoje:
+        stxt, scls = "AGUARDANDO", "s-pre"
+    else:
+        stxt, scls = "AGENDADO", "s-pre"
+
+    live = "live" if estado == "in" else ""
+    if res:
+        gc, gf, _ = res
+        score = f'<div class="m-score {live}">{gc}<span class="sep">:</span>{gf}</div>'
+    else:
+        score = '<div class="m-score"><span class="vs">VS</span></div>'
+
+    moon = " 🌙" if eh_madrugada(casa, fora) else ""
+    chips = "".join(f'<span class="chip {CHIP_CLS.get(c, "chip")}">{c}</span>'
+                    for c in canais_do_jogo(casa, fora))
+    sede = SEDE_PAIS.get(cidade, "")
+    return (
+        f'<div class="match {live}">'
+        f'<div class="m-head"><span>🕒 {hora_jogo(casa, fora)}{moon}</span>'
+        f'<span>GRUPO {g}</span><span class="m-status {scls}">{stxt}</span></div>'
+        f'<div class="m-body">'
+        f'<div class="m-team"><span class="m-flag">{flag(casa)}</span><span class="m-name">{casa}</span></div>'
+        f'{score}'
+        f'<div class="m-team"><span class="m-flag">{flag(fora)}</span><span class="m-name">{fora}</span></div>'
+        f'</div>'
+        f'<div class="m-foot"><span class="m-venue">📍 {cidade} · {sede}</span>'
+        f'<span>{chips}</span></div></div>'
+    )
+
+
+def grupo_tabela_html(g, resultados):
+    df = calcular_classificacao(g, resultados)
+    rows = ""
+    for pos, row in df.iterrows():
+        cls = "q" if pos <= 2 else ("p" if pos == 3 else "")
+        rows += (
+            f'<tr class="{cls}"><td class="pos">{pos}</td>'
+            f'<td class="l">{row["Seleção"]}</td>'
+            f'<td class="pts">{row["P"]}</td><td>{row["J"]}</td>'
+            f'<td>{row["V"]}</td><td>{row["E"]}</td><td>{row["D"]}</td>'
+            f'<td>{row["SG"]:+d}</td></tr>'
+        )
+    return (
+        f'<div class="grp"><div class="grp-head">Grupo {g}</div>'
+        f'<table class="tbl"><thead><tr><th class="pos">#</th><th class="l">Seleção</th>'
+        f'<th>P</th><th>J</th><th>V</th><th>E</th><th>D</th><th>SG</th></tr></thead>'
+        f'<tbody>{rows}</tbody></table></div>'
+    )
+
+
+# ----------------------------------------------------------------------------
 # Cabeçalho
 # ----------------------------------------------------------------------------
-st.title("🏆 Copa do Mundo FIFA 2026")
-st.caption("Estados Unidos 🇺🇸 · Canadá 🇨🇦 · México 🇲🇽  —  Fase de grupos (11 a 27 de junho)  "
-           "·  🕒 Horários de Brasília (BRT) · 🌙 = madrugada")
-
 resultados = obter_resultados(usar_espn)
 agora = datetime.now(BR_TZ)
 hoje = agora.date()
-
 n_encerrados = sum(1 for v in resultados.values() if v[2] == "post")
 n_ao_vivo = sum(1 for v in resultados.values() if v[2] == "in")
 
-col_a, col_b, col_c, col_d = st.columns(4)
-col_a.metric("Jogos", len(JOGOS))
-col_b.metric("Encerrados", n_encerrados)
-col_c.metric("🔴 Ao vivo", n_ao_vivo)
-col_d.metric("Atualizado às", agora.strftime("%H:%M:%S"))
+st.markdown(
+    '<div class="hero"><span class="hero-badge">FIFA WORLD CUP · COPA TECH</span>'
+    '<h1>COPA DO MUNDO <span>2026</span></h1>'
+    '<div class="hero-sub">🇺🇸 EUA · 🇨🇦 Canadá · 🇲🇽 México — Fase de grupos · '
+    '🕒 horário de Brasília · 🌙 madrugada</div></div>',
+    unsafe_allow_html=True,
+)
+
+st.markdown(
+    f'<div class="stats">'
+    f'<div class="stat"><div class="v">{len(JOGOS)}</div><div class="l">Jogos</div></div>'
+    f'<div class="stat"><div class="v">{n_encerrados}</div><div class="l">Encerrados</div></div>'
+    f'<div class="stat live"><div class="v">{n_ao_vivo}</div><div class="l">Ao vivo</div></div>'
+    f'<div class="stat"><div class="v">{agora:%H:%M}</div><div class="l">Atualizado</div></div>'
+    f'</div>',
+    unsafe_allow_html=True,
+)
 
 if usar_espn:
-    st.info("🟢 Fonte: feed público de placares da ESPN (mesmos dados dos cards do Google). "
-            "A página atualiza sozinha a cada 30s.")
+    st.caption("🟢 Placares ao vivo via feed público da ESPN (mesmos dados dos cards do Google) · "
+               "atualização automática a cada 30s")
 
 tab_jogos, tab_grupos = st.tabs(["📅 Jogos por dia", "📊 Classificação dos grupos"])
 
@@ -522,55 +688,30 @@ with tab_jogos:
             continue
 
         jogos_dia.sort(key=lambda x: _chave_horario(x[1], x[2]))
-        marcador = " 🔴 HOJE" if datetime.strptime(d, "%Y-%m-%d").date() == hoje else ""
-        st.subheader(f"📆 {data_formatada(d)}{marcador}")
-
-        for g, casa, fora, cidade in jogos_dia:
-            res = resultados.get((casa, fora))
-            estado = res[2] if res else None
-            status = status_jogo(d, estado, hoje)
-
-            if res:
-                gc, gf, _ = res
-                cor = "#e10600" if estado == "in" else "#0b8043"
-                placar = (f"<div style='text-align:center;font-size:2rem;font-weight:800;"
-                          f"line-height:1;color:{cor}'>{gc}<span style='color:#999'> x </span>{gf}</div>")
-            else:
-                placar = ("<div style='text-align:center;font-size:1.5rem;font-weight:700;"
-                          "color:#bbb;line-height:1'>x</div>")
-
-            canais = " · ".join(f"`{c}`" for c in canais_do_jogo(casa, fora))
-            sede = SEDE_PAIS.get(cidade, "")
-            hora = hora_jogo(casa, fora)
-            hora_txt = f"🕒 **{hora}**" + (" 🌙" if eh_madrugada(casa, fora) else "")
-
-            c_hora, l1, l2, l3, l4 = st.columns([1.3, 3, 1.4, 3, 2.4])
-            c_hora.markdown(f"<div style='padding-top:8px'>{hora_txt}</div>",
-                            unsafe_allow_html=True)
-            l1.markdown(f"<div style='text-align:right;font-size:1.1rem;padding-top:8px'>"
-                        f"{flag(casa)} <b>{casa}</b></div>", unsafe_allow_html=True)
-            l2.markdown(placar, unsafe_allow_html=True)
-            l3.markdown(f"<div style='font-size:1.1rem;padding-top:8px'>"
-                        f"{flag(fora)} <b>{fora}</b></div>", unsafe_allow_html=True)
-            l4.markdown(f"<div style='padding-top:8px'><code>Grupo {g}</code><br>{status}</div>",
-                        unsafe_allow_html=True)
-            st.caption(f"📍 {cidade} ({sede}) &nbsp;|&nbsp; 📺 {canais}")
-            st.divider()
+        eh_hoje = datetime.strptime(d, "%Y-%m-%d").date() == hoje
+        badge = '<span class="today">🔴 HOJE</span>' if eh_hoje else ""
+        st.markdown(
+            f'<div class="dayhead"><span class="dot"></span>'
+            f'<span class="d">{data_formatada(d)}</span>{badge}</div>',
+            unsafe_allow_html=True,
+        )
+        cards = "".join(
+            card_jogo_html(d, g, casa, fora, cidade, resultados.get((casa, fora)), hoje)
+            for g, casa, fora, cidade in jogos_dia
+        )
+        st.markdown(f'<div class="day-grid">{cards}</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------
 # Aba 2 — Classificação dos grupos
 # ----------------------------------------------------------------------------
 with tab_grupos:
-    st.caption("Os dois primeiros de cada grupo avançam, além dos 8 melhores terceiros colocados. "
-               "Critérios: Pontos → Saldo de gols → Gols pró.")
-    grupos_lista = list(GRUPOS.keys())
-    for i in range(0, len(grupos_lista), 2):
-        cols = st.columns(2)
-        for col, g in zip(cols, grupos_lista[i:i + 2]):
-            with col:
-                st.markdown(f"### Grupo {g}")
-                df = calcular_classificacao(g, resultados)
-                st.dataframe(df, use_container_width=True)
+    st.markdown(
+        '<div class="legend">Classificam-se os <b>2 primeiros</b> de cada grupo + os '
+        '<i>8 melhores 3º colocados</i>. &nbsp;Critérios: Pontos → Saldo (SG) → Gols pró.</div>',
+        unsafe_allow_html=True,
+    )
+    tabelas = "".join(grupo_tabela_html(g, resultados) for g in GRUPOS)
+    st.markdown(f'<div class="group-grid">{tabelas}</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------
 # Atualização automática
