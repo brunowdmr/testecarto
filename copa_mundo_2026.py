@@ -260,26 +260,54 @@ SEDE_PAIS = {
     "Kansas City": "🇺🇸 EUA", "Seattle": "🇺🇸 EUA",
 }
 
-# Seleções com maior apelo (recebem transmissão na TV fechada além da CazéTV)
+# Seleções com maior apelo (usadas para escolher o "jogo do dia" da Globo)
 GRANDES = {
     "Brasil", "Argentina", "França", "Espanha", "Inglaterra", "Portugal",
     "Alemanha", "Holanda", "Bélgica", "Uruguai", "México", "EUA", "Croácia",
 }
 
+# Ordem de prestígio para escolher o jogo principal de cada dia (TV aberta)
+_PRESTIGIO_ORDEM = [
+    "Brasil", "Argentina", "França", "Espanha", "Inglaterra", "Portugal",
+    "Alemanha", "Holanda", "Bélgica", "Uruguai", "Croácia", "Colômbia",
+    "México", "EUA", "Marrocos", "Japão", "Senegal", "Suíça", "Equador",
+    "Coreia do Sul", "Catar", "Austrália", "Noruega", "Egito", "Costa do Marfim",
+]
+_PRESTIGIO = {t: len(_PRESTIGIO_ORDEM) - i for i, t in enumerate(_PRESTIGIO_ORDEM)}
+
+
+def _prestigio_jogo(casa, fora):
+    return _PRESTIGIO.get(casa, 0) + _PRESTIGIO.get(fora, 0)
+
+
+# Jogos que vão à Globo (TV aberta): a Seleção + o jogo principal de cada dia
+def _calcular_jogos_globo():
+    globo = set()
+    por_dia = {}
+    for d, g, c, f, ci in JOGOS:
+        por_dia.setdefault(d, []).append((c, f))
+        if "Brasil" in (c, f):
+            globo.add((c, f))
+    for d, confrontos in por_dia.items():
+        globo.add(max(confrontos, key=lambda cf: _prestigio_jogo(*cf)))
+    return globo
+
+
+GLOBO_GAMES = _calcular_jogos_globo()
+
 
 def canais_do_jogo(casa: str, fora: str):
-    """Retorna a lista de canais/plataformas que transmitem o jogo.
+    """Retorna os canais/plataformas que transmitem o jogo, em ordem de TV.
 
-    A CazéTV (YouTube, gratuito) exibe todos os 104 jogos. Globo (TV aberta) e
-    SporTV (TV fechada) priorizam jogos do Brasil e das principais seleções.
+    - CazéTV (YouTube, grátis): todos os 104 jogos
+    - SporTV (TV fechada): todos os jogos
+    - Globo (TV aberta): jogos da Seleção + o jogo principal de cada dia
     """
     canais = []
-    if casa == "Brasil" or fora == "Brasil":
-        canais = ["Globo", "SporTV", "CazéTV"]
-    elif casa in GRANDES or fora in GRANDES:
-        canais = ["SporTV", "CazéTV"]
-    else:
-        canais = ["CazéTV"]
+    if (casa, fora) in GLOBO_GAMES:
+        canais.append("Globo")
+    canais.append("SporTV")
+    canais.append("CazéTV")
     return canais
 
 
