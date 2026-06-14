@@ -163,6 +163,7 @@ RESULTADOS = {
     ("EUA", "Paraguai"): (4, 1),
     ("Catar", "Suíça"): (1, 1),
     ("Brasil", "Marrocos"): (1, 1),
+    ("Haiti", "Escócia"): (0, 1),
     ("Austrália", "Turquia"): (2, 0),
 }
 
@@ -301,6 +302,7 @@ EN_PARA_PT = {
     "paraguay": "Paraguai", "australia": "Austrália", "turkey": "Turquia", "turkiye": "Turquia",
     "germany": "Alemanha", "curacao": "Curaçao", "ivory coast": "Costa do Marfim",
     "cote d'ivoire": "Costa do Marfim", "ecuador": "Equador", "netherlands": "Holanda",
+    "bosnia-herzegovina": "Bósnia",
     "japan": "Japão", "sweden": "Suécia", "tunisia": "Tunísia", "belgium": "Bélgica",
     "egypt": "Egito", "iran": "Irã", "new zealand": "Nova Zelândia", "spain": "Espanha",
     "cape verde": "Cabo Verde", "cabo verde": "Cabo Verde", "saudi arabia": "Arábia Saudita",
@@ -312,51 +314,73 @@ EN_PARA_PT = {
 }
 
 
-@st.cache_data(ttl=60, show_spinner=False)
-def buscar_resultados_ao_vivo(api_key: str):
-    """Tenta buscar placares ao vivo (TheSportsDB). Retorna {(casa, fora): (gc, gf)}.
+# Endereço do feed público de placares da ESPN (mesmos dados dos cards do Google).
+ESPN_URL = ("https://site.api.espn.com/apis/site/v2/sports/soccer/"
+            "fifa.world/scoreboard?dates={data}")
 
-    Em caso de qualquer falha de rede/formato, retorna {} e a página usa os
-    resultados cadastrados manualmente em RESULTADOS.
+# Conjunto de confrontos na orientação oficial (mandante, visitante)
+CONFRONTOS = {(c, f) for _, _, c, f, _ in JOGOS}
+
+
+@st.cache_data(ttl=30, show_spinner="Buscando placares ao vivo...")
+def buscar_resultados_espn(_minuto):
+    """Busca placares (inclusive jogos AO VIVO) no feed público da ESPN.
+
+    Retorna {(casa, fora): (gols_casa, gols_fora, estado)}, estado em {'in', 'post'}.
+    O parâmetro `_minuto` serve só para renovar o cache. Falhas de rede são
+    ignoradas silenciosamente (a página então usa os resultados de RESULTADOS).
     """
-    if not api_key:
-        return {}
     achados = {}
-    datas = sorted({d for d, *_ in JOGOS})
-    for d in datas:
-        url = f"https://www.thesportsdb.com/api/v1/json/{api_key}/eventsday.php?d={d}&s=Soccer"
+    for d in sorted({x[0] for x in JOGOS}):
+        url = ESPN_URL.format(data=d.replace("-", ""))
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
                 dados = json.loads(resp.read().decode("utf-8"))
         except Exception:
             continue
-        for ev in (dados.get("events") or []):
-            if "world cup" not in _strip(ev.get("strLeague", "")):
+        for ev in dados.get("events", []):
+            try:
+                estado = ev["status"]["type"]["state"]  # pre, in, post
+                if estado not in ("in", "post"):
+                    continue
+                cs = ev["competitions"][0]["competitors"]
+                h = next(c for c in cs if c["homeAway"] == "home")
+                a = next(c for c in cs if c["homeAway"] == "away")
+                casa = EN_PARA_PT.get(_strip(h["team"]["displayName"]))
+                fora = EN_PARA_PT.get(_strip(a["team"]["displayName"]))
+                gc, gf = h.get("score"), a.get("score")
+                if not (casa and fora) or gc in (None, "") or gf in (None, ""):
+                    continue
+                if (casa, fora) in CONFRONTOS:
+                    achados[(casa, fora)] = (int(gc), int(gf), estado)
+                elif (fora, casa) in CONFRONTOS:  # orientação invertida
+                    achados[(fora, casa)] = (int(gf), int(gc), estado)
+            except Exception:
                 continue
-            casa = EN_PARA_PT.get(_strip(ev.get("strHomeTeam", "")))
-            fora = EN_PARA_PT.get(_strip(ev.get("strAwayTeam", "")))
-            gc, gf = ev.get("intHomeScore"), ev.get("intAwayScore")
-            if casa and fora and gc not in (None, "") and gf not in (None, ""):
-                achados[(casa, fora)] = (int(gc), int(gf))
     return achados
 
 
-def obter_resultados(usar_api: bool, api_key: str):
-    """Combina resultados manuais com os obtidos ao vivo (estes têm prioridade)."""
-    resultados = dict(RESULTADOS)
-    if usar_api:
-        resultados.update(buscar_resultados_ao_vivo(api_key))
+def obter_resultados(usar_espn: bool):
+    """Combina resultados manuais (RESULTADOS) com os do feed ESPN (prioridade).
+
+    Valor de cada confronto: (gols_casa, gols_fora, estado), estado em
+    {'post' (encerrado), 'in' (ao vivo)}.
+    """
+    resultados = {k: (gc, gf, "post") for k, (gc, gf) in RESULTADOS.items()}
+    if usar_espn:
+        resultados.update(buscar_resultados_espn(datetime.now().strftime("%Y%m%d%H%M")))
     return resultados
 
 
 def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
-    """Calcula a tabela de classificação de um grupo a partir dos resultados."""
+    """Calcula a classificação do grupo (somente jogos ENCERRADOS contam pontos)."""
     tab = {t: dict(P=0, J=0, V=0, E=0, D=0, GP=0, GC=0) for t in GRUPOS[grupo]}
     for data, g, casa, fora, cidade in JOGOS:
-        if g != grupo or (casa, fora) not in resultados:
+        res = resultados.get((casa, fora))
+        if g != grupo or res is None or res[2] != "post":
             continue
-        gc, gf = resultados[(casa, fora)]
+        gc, gf, _ = res
         for t, marcou, sofreu in ((casa, gc, gf), (fora, gf, gc)):
             tab[t]["J"] += 1
             tab[t]["GP"] += marcou
@@ -404,14 +428,16 @@ def eh_madrugada(casa: str, fora: str) -> bool:
     return h[:2].isdigit() and int(h[:2]) < 6
 
 
-def status_jogo(data_str: str, tem_resultado: bool, hoje: date):
+def status_jogo(data_str: str, estado, hoje: date):
     d = datetime.strptime(data_str, "%Y-%m-%d").date()
-    if tem_resultado:
+    if estado == "in":
+        return "🔴 AO VIVO"
+    if estado == "post":
         return "✅ Encerrado"
     if d < hoje:
         return "⏳ Aguardando"
     if d == hoje:
-        return "🔴 Hoje"
+        return "🟡 Hoje"
     return "🗓️ Agendado"
 
 
@@ -428,13 +454,14 @@ def data_formatada(data_str: str) -> str:
 # Barra lateral
 # ----------------------------------------------------------------------------
 st.sidebar.title("⚙️ Opções")
-auto = st.sidebar.toggle("Atualização automática (60s)", value=True)
-usar_api = st.sidebar.toggle("Buscar placares ao vivo (API)", value=False,
-                             help="Requer uma chave da API TheSportsDB. Sem chave válida, "
-                                  "a página usa os resultados cadastrados manualmente.")
-api_key = ""
-if usar_api:
-    api_key = st.sidebar.text_input("Chave TheSportsDB", value="3", type="password")
+auto = st.sidebar.toggle("Atualização automática (30s)", value=True)
+usar_espn = st.sidebar.toggle("Placares ao vivo (feed ESPN)", value=True,
+                              help="Busca placares e jogos ao vivo no feed público da ESPN "
+                                   "(os mesmos dados exibidos pelo Google). Se a rede falhar, "
+                                   "a página usa os resultados cadastrados manualmente.")
+if st.sidebar.button("🔄 Atualizar agora", use_container_width=True):
+    st.cache_data.clear()
+    st.rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.markdown(
@@ -452,19 +479,22 @@ st.title("🏆 Copa do Mundo FIFA 2026")
 st.caption("Estados Unidos 🇺🇸 · Canadá 🇨🇦 · México 🇲🇽  —  Fase de grupos (11 a 27 de junho)  "
            "·  🕒 Horários de Brasília (BRT) · 🌙 = madrugada")
 
-resultados = obter_resultados(usar_api, api_key)
+resultados = obter_resultados(usar_espn)
 agora = datetime.now(BR_TZ)
 hoje = agora.date()
 
-col_a, col_b, col_c = st.columns(3)
-col_a.metric("Jogos", len(JOGOS))
-col_b.metric("Encerrados", sum(1 for _, _, c, f, _ in JOGOS if (c, f) in resultados))
-col_c.metric("Última atualização", agora.strftime("%d/%m %H:%M:%S"))
+n_encerrados = sum(1 for v in resultados.values() if v[2] == "post")
+n_ao_vivo = sum(1 for v in resultados.values() if v[2] == "in")
 
-if usar_api:
-    fonte = "🟢 Placares ao vivo via API" if buscar_resultados_ao_vivo(api_key) else \
-        "🟡 API sem dados — usando resultados cadastrados"
-    st.info(fonte)
+col_a, col_b, col_c, col_d = st.columns(4)
+col_a.metric("Jogos", len(JOGOS))
+col_b.metric("Encerrados", n_encerrados)
+col_c.metric("🔴 Ao vivo", n_ao_vivo)
+col_d.metric("Atualizado às", agora.strftime("%H:%M:%S"))
+
+if usar_espn:
+    st.info("🟢 Fonte: feed público de placares da ESPN (mesmos dados dos cards do Google). "
+            "A página atualiza sozinha a cada 30s.")
 
 tab_jogos, tab_grupos = st.tabs(["📅 Jogos por dia", "📊 Classificação dos grupos"])
 
@@ -496,27 +526,34 @@ with tab_jogos:
         st.subheader(f"📆 {data_formatada(d)}{marcador}")
 
         for g, casa, fora, cidade in jogos_dia:
-            tem_res = (casa, fora) in resultados
-            status = status_jogo(d, tem_res, hoje)
-            if tem_res:
-                gc, gf = resultados[(casa, fora)]
-                placar = f"**{gc} x {gf}**"
+            res = resultados.get((casa, fora))
+            estado = res[2] if res else None
+            status = status_jogo(d, estado, hoje)
+
+            if res:
+                gc, gf, _ = res
+                cor = "#e10600" if estado == "in" else "#0b8043"
+                placar = (f"<div style='text-align:center;font-size:2rem;font-weight:800;"
+                          f"line-height:1;color:{cor}'>{gc}<span style='color:#999'> x </span>{gf}</div>")
             else:
-                placar = "_x_"
+                placar = ("<div style='text-align:center;font-size:1.5rem;font-weight:700;"
+                          "color:#bbb;line-height:1'>x</div>")
 
             canais = " · ".join(f"`{c}`" for c in canais_do_jogo(casa, fora))
             sede = SEDE_PAIS.get(cidade, "")
             hora = hora_jogo(casa, fora)
             hora_txt = f"🕒 **{hora}**" + (" 🌙" if eh_madrugada(casa, fora) else "")
 
-            c_hora, l1, l2, l3, l4 = st.columns([1.4, 3, 1, 3, 2.6])
-            c_hora.markdown(hora_txt)
-            l1.markdown(f"<div style='text-align:right'>{flag(casa)} **{casa}**</div>",
+            c_hora, l1, l2, l3, l4 = st.columns([1.3, 3, 1.4, 3, 2.4])
+            c_hora.markdown(f"<div style='padding-top:8px'>{hora_txt}</div>",
+                            unsafe_allow_html=True)
+            l1.markdown(f"<div style='text-align:right;font-size:1.1rem;padding-top:8px'>"
+                        f"{flag(casa)} <b>{casa}</b></div>", unsafe_allow_html=True)
+            l2.markdown(placar, unsafe_allow_html=True)
+            l3.markdown(f"<div style='font-size:1.1rem;padding-top:8px'>"
+                        f"{flag(fora)} <b>{fora}</b></div>", unsafe_allow_html=True)
+            l4.markdown(f"<div style='padding-top:8px'><code>Grupo {g}</code><br>{status}</div>",
                         unsafe_allow_html=True)
-            l2.markdown(f"<div style='text-align:center'>{placar}</div>",
-                        unsafe_allow_html=True)
-            l3.markdown(f"{flag(fora)} **{fora}**")
-            l4.markdown(f"`Grupo {g}` · {status}")
             st.caption(f"📍 {cidade} ({sede}) &nbsp;|&nbsp; 📺 {canais}")
             st.divider()
 
@@ -540,6 +577,6 @@ with tab_grupos:
 # ----------------------------------------------------------------------------
 if auto:
     import time
-    time.sleep(60)
+    time.sleep(30)
     st.rerun()
 
