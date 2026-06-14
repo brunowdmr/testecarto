@@ -322,15 +322,17 @@ ESPN_URL = ("https://site.api.espn.com/apis/site/v2/sports/soccer/"
 CONFRONTOS = {(c, f) for _, _, c, f, _ in JOGOS}
 
 
-@st.cache_data(ttl=30, show_spinner="Buscando placares ao vivo...")
-def buscar_resultados_espn(_minuto):
-    """Busca placares (inclusive jogos AO VIVO) no feed público da ESPN.
+@st.cache_data(ttl=30, show_spinner="Buscando dados ao vivo...")
+def buscar_espn(_minuto):
+    """Busca placares E horários oficiais no feed público da ESPN.
 
-    Retorna {(casa, fora): (gols_casa, gols_fora, estado)}, estado em {'in', 'post'}.
+    Retorna (resultados, horarios):
+      - resultados: {(casa, fora): (gols_casa, gols_fora, estado)} para jogos 'in'/'post'
+      - horarios:   {(casa, fora): 'HHhMM'} horário de Brasília (do timestamp oficial)
     O parâmetro `_minuto` serve só para renovar o cache. Falhas de rede são
-    ignoradas silenciosamente (a página então usa os resultados de RESULTADOS).
+    ignoradas silenciosamente (a página usa RESULTADOS/HORARIOS como reserva).
     """
-    achados = {}
+    resultados, horarios = {}, {}
     for d in sorted({x[0] for x in JOGOS}):
         url = ESPN_URL.format(data=d.replace("-", ""))
         try:
@@ -342,35 +344,47 @@ def buscar_resultados_espn(_minuto):
         for ev in dados.get("events", []):
             try:
                 estado = ev["status"]["type"]["state"]  # pre, in, post
-                if estado not in ("in", "post"):
-                    continue
                 cs = ev["competitions"][0]["competitors"]
                 h = next(c for c in cs if c["homeAway"] == "home")
                 a = next(c for c in cs if c["homeAway"] == "away")
                 casa = EN_PARA_PT.get(_strip(h["team"]["displayName"]))
                 fora = EN_PARA_PT.get(_strip(a["team"]["displayName"]))
-                gc, gf = h.get("score"), a.get("score")
-                if not (casa and fora) or gc in (None, "") or gf in (None, ""):
+                if not (casa and fora):
                     continue
                 if (casa, fora) in CONFRONTOS:
-                    achados[(casa, fora)] = (int(gc), int(gf), estado)
+                    chave, invertido = (casa, fora), False
                 elif (fora, casa) in CONFRONTOS:  # orientação invertida
-                    achados[(fora, casa)] = (int(gf), int(gc), estado)
+                    chave, invertido = (fora, casa), True
+                else:
+                    continue
+                # Horário oficial (UTC) convertido para Brasília
+                dt = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(BR_TZ)
+                horarios[chave] = f"{dt:%Hh%M}"
+                # Placar (apenas jogos em andamento ou encerrados)
+                if estado in ("in", "post"):
+                    gc, gf = h.get("score"), a.get("score")
+                    if gc not in (None, "") and gf not in (None, ""):
+                        gc, gf = int(gc), int(gf)
+                        resultados[chave] = (gf, gc, estado) if invertido else (gc, gf, estado)
             except Exception:
                 continue
-    return achados
+    return resultados, horarios
 
 
-def obter_resultados(usar_espn: bool):
-    """Combina resultados manuais (RESULTADOS) com os do feed ESPN (prioridade).
+def obter_dados(usar_espn: bool):
+    """Retorna (resultados, horarios) combinando dados manuais e do feed ESPN.
 
-    Valor de cada confronto: (gols_casa, gols_fora, estado), estado em
-    {'post' (encerrado), 'in' (ao vivo)}.
+    - resultados: {(casa, fora): (gols_casa, gols_fora, estado)} (estado: 'post'/'in')
+    - horarios:   {(casa, fora): 'HHhMM'} em horário de Brasília
+    O feed ESPN tem prioridade sobre os valores cadastrados manualmente.
     """
     resultados = {k: (gc, gf, "post") for k, (gc, gf) in RESULTADOS.items()}
+    horarios = dict(HORARIOS)
     if usar_espn:
-        resultados.update(buscar_resultados_espn(datetime.now().strftime("%Y%m%d%H%M")))
-    return resultados
+        r, h = buscar_espn(datetime.now().strftime("%Y%m%d%H%M"))
+        resultados.update(r)
+        horarios.update(h)
+    return resultados, horarios
 
 
 def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
@@ -407,14 +421,14 @@ def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
     return df
 
 
-def hora_jogo(casa: str, fora: str) -> str:
+def hora_jogo(casa: str, fora: str, horarios: dict = HORARIOS) -> str:
     """Horário de Brasília do jogo (string 'HHhMM')."""
-    return HORARIOS.get((casa, fora), "--h--")
+    return horarios.get((casa, fora), "--h--")
 
 
-def _chave_horario(casa: str, fora: str) -> int:
+def _chave_horario(casa: str, fora: str, horarios: dict = HORARIOS) -> int:
     """Chave para ordenar jogos do dia em ordem cronológica (madrugada por último)."""
-    h = hora_jogo(casa, fora)
+    h = hora_jogo(casa, fora, horarios)
     try:
         hh, mm = int(h[:2]), int(h[3:5])
     except ValueError:
@@ -423,8 +437,8 @@ def _chave_horario(casa: str, fora: str) -> int:
     return hh * 60 + mm + (24 * 60 if hh < 6 else 0)
 
 
-def eh_madrugada(casa: str, fora: str) -> bool:
-    h = hora_jogo(casa, fora)
+def eh_madrugada(casa: str, fora: str, horarios: dict = HORARIOS) -> bool:
+    h = hora_jogo(casa, fora, horarios)
     return h[:2].isdigit() and int(h[:2]) < 6
 
 
@@ -572,7 +586,7 @@ st.markdown(CSS, unsafe_allow_html=True)
 CHIP_CLS = {"Globo": "chip-globo", "SporTV": "chip-sportv", "CazéTV": "chip-caze"}
 
 
-def card_jogo_html(d, g, casa, fora, cidade, res, hoje):
+def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios):
     dt = datetime.strptime(d, "%Y-%m-%d").date()
     estado = res[2] if res else None
     if estado == "in":
@@ -593,13 +607,13 @@ def card_jogo_html(d, g, casa, fora, cidade, res, hoje):
     else:
         score = '<div class="m-score"><span class="vs">VS</span></div>'
 
-    moon = " 🌙" if eh_madrugada(casa, fora) else ""
+    moon = " 🌙" if eh_madrugada(casa, fora, horarios) else ""
     chips = "".join(f'<span class="chip {CHIP_CLS.get(c, "chip")}">{c}</span>'
                     for c in canais_do_jogo(casa, fora))
     sede = SEDE_PAIS.get(cidade, "")
     return (
         f'<div class="match {live}">'
-        f'<div class="m-head"><span>🕒 {hora_jogo(casa, fora)}{moon}</span>'
+        f'<div class="m-head"><span>🕒 {hora_jogo(casa, fora, horarios)}{moon}</span>'
         f'<span>GRUPO {g}</span><span class="m-status {scls}">{stxt}</span></div>'
         f'<div class="m-body">'
         f'<div class="m-team"><span class="m-flag">{flag(casa)}</span><span class="m-name">{casa}</span></div>'
@@ -634,7 +648,7 @@ def grupo_tabela_html(g, resultados):
 # ----------------------------------------------------------------------------
 # Cabeçalho
 # ----------------------------------------------------------------------------
-resultados = obter_resultados(usar_espn)
+resultados, horarios = obter_dados(usar_espn)
 agora = datetime.now(BR_TZ)
 hoje = agora.date()
 n_encerrados = sum(1 for v in resultados.values() if v[2] == "post")
@@ -687,7 +701,7 @@ with tab_jogos:
         if not jogos_dia:
             continue
 
-        jogos_dia.sort(key=lambda x: _chave_horario(x[1], x[2]))
+        jogos_dia.sort(key=lambda x: _chave_horario(x[1], x[2], horarios))
         eh_hoje = datetime.strptime(d, "%Y-%m-%d").date() == hoje
         badge = '<span class="today">🔴 HOJE</span>' if eh_hoje else ""
         st.markdown(
@@ -696,7 +710,7 @@ with tab_jogos:
             unsafe_allow_html=True,
         )
         cards = "".join(
-            card_jogo_html(d, g, casa, fora, cidade, resultados.get((casa, fora)), hoje)
+            card_jogo_html(d, g, casa, fora, cidade, resultados.get((casa, fora)), hoje, horarios)
             for g, casa, fora, cidade in jogos_dia
         )
         st.markdown(f'<div class="day-grid">{cards}</div>', unsafe_allow_html=True)
