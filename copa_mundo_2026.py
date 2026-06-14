@@ -11,6 +11,7 @@ Execute com:  streamlit run copa_mundo_2026.py
 
 import json
 import urllib.request
+import urllib.parse
 import unicodedata
 from datetime import datetime, date, timezone, timedelta
 
@@ -332,7 +333,7 @@ def buscar_espn(_minuto):
     O parâmetro `_minuto` serve só para renovar o cache. Falhas de rede são
     ignoradas silenciosamente (a página usa RESULTADOS/HORARIOS como reserva).
     """
-    resultados, horarios = {}, {}
+    resultados, horarios, detalhes = {}, {}, {}
     for d in sorted({x[0] for x in JOGOS}):
         url = ESPN_URL.format(data=d.replace("-", ""))
         try:
@@ -360,6 +361,9 @@ def buscar_espn(_minuto):
                 # Horário oficial (UTC) convertido para Brasília
                 dt = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(BR_TZ)
                 horarios[chave] = f"{dt:%Hh%M}"
+                # Minuto do jogo ao vivo (ex.: "30'", "Intervalo")
+                if estado == "in":
+                    detalhes[chave] = (ev["status"].get("displayClock") or "AO VIVO").strip()
                 # Placar (apenas jogos em andamento ou encerrados)
                 if estado in ("in", "post"):
                     gc, gf = h.get("score"), a.get("score")
@@ -368,7 +372,7 @@ def buscar_espn(_minuto):
                         resultados[chave] = (gf, gc, estado) if invertido else (gc, gf, estado)
             except Exception:
                 continue
-    return resultados, horarios
+    return resultados, horarios, detalhes
 
 
 def obter_dados(usar_espn: bool):
@@ -380,11 +384,13 @@ def obter_dados(usar_espn: bool):
     """
     resultados = {k: (gc, gf, "post") for k, (gc, gf) in RESULTADOS.items()}
     horarios = dict(HORARIOS)
+    detalhes = {}
     if usar_espn:
-        r, h = buscar_espn(datetime.now().strftime("%Y%m%d%H%M"))
+        r, h, dt = buscar_espn(datetime.now().strftime("%Y%m%d%H%M"))
         resultados.update(r)
         horarios.update(h)
-    return resultados, horarios
+        detalhes.update(dt)
+    return resultados, horarios, detalhes
 
 
 def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
@@ -529,7 +535,14 @@ CSS = """
 .dayhead .d{font:700 18px/1 'Rajdhani',sans-serif; letter-spacing:1.5px; color:var(--txt); text-transform:uppercase;}
 .dayhead .today{font:700 11px/1 'Rajdhani',sans-serif; letter-spacing:1px; color:#06101f; background:var(--amber); padding:5px 9px; border-radius:999px;}
 .day-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(330px,1fr)); gap:14px;}
+/* Live bar */
+.livebar{display:flex; align-items:center; gap:11px; margin:4px 0 12px;
+  font:800 16px/1 'Rajdhani',sans-serif; letter-spacing:2px; color:#fff; text-transform:uppercase;}
+.livebar:before{content:""; width:11px; height:11px; border-radius:50%; background:var(--red);
+  box-shadow:0 0 14px var(--red); animation:pulse 1.2s infinite;}
 /* Match card */
+.match-link{text-decoration:none; color:inherit; display:block; cursor:pointer;}
+.match-link:hover{text-decoration:none;}
 .match{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line);
   border-radius:18px; padding:14px 16px; transition:.16s; position:relative; overflow:hidden;}
 .match:hover{transform:translateY(-3px); border-color:rgba(34,211,238,.45); box-shadow:0 12px 30px rgba(0,0,0,.45);}
@@ -586,11 +599,11 @@ st.markdown(CSS, unsafe_allow_html=True)
 CHIP_CLS = {"Globo": "chip-globo", "SporTV": "chip-sportv", "CazéTV": "chip-caze"}
 
 
-def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios):
+def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios, detalhe=None):
     dt = datetime.strptime(d, "%Y-%m-%d").date()
     estado = res[2] if res else None
     if estado == "in":
-        stxt, scls = "🔴 AO VIVO", "s-live"
+        stxt, scls = (f"🔴 {detalhe}" if detalhe else "🔴 AO VIVO"), "s-live"
     elif estado == "post":
         stxt, scls = "ENCERRADO", "s-post"
     elif dt == hoje:
@@ -611,7 +624,10 @@ def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios):
     chips = "".join(f'<span class="chip {CHIP_CLS.get(c, "chip")}">{c}</span>'
                     for c in canais_do_jogo(casa, fora))
     sede = SEDE_PAIS.get(cidade, "")
+    url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(
+        f"{casa} x {fora} copa do mundo 2026 ao vivo")
     return (
+        f'<a class="match-link" href="{url}" target="_blank" rel="noopener">'
         f'<div class="match {live}">'
         f'<div class="m-head"><span>🕒 {hora_jogo(casa, fora, horarios)}{moon}</span>'
         f'<span>GRUPO {g}</span><span class="m-status {scls}">{stxt}</span></div>'
@@ -621,7 +637,7 @@ def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios):
         f'<div class="m-team"><span class="m-flag">{flag(fora)}</span><span class="m-name">{fora}</span></div>'
         f'</div>'
         f'<div class="m-foot"><span class="m-venue">📍 {cidade} · {sede}</span>'
-        f'<span>{chips}</span></div></div>'
+        f'<span>{chips}</span></div></div></a>'
     )
 
 
@@ -648,7 +664,7 @@ def grupo_tabela_html(g, resultados):
 # ----------------------------------------------------------------------------
 # Cabeçalho
 # ----------------------------------------------------------------------------
-resultados, horarios = obter_dados(usar_espn)
+resultados, horarios, detalhes = obter_dados(usar_espn)
 agora = datetime.now(BR_TZ)
 hoje = agora.date()
 n_encerrados = sum(1 for v in resultados.values() if v[2] == "post")
@@ -674,7 +690,18 @@ st.markdown(
 
 if usar_espn:
     st.caption("🟢 Placares ao vivo via feed público da ESPN (mesmos dados dos cards do Google) · "
-               "atualização automática a cada 30s")
+               "atualização automática a cada 30s · 👆 toque num jogo para abrir os detalhes")
+
+# Seção "AO VIVO AGORA" — destaque para jogos em andamento
+jogos_ao_vivo = [(d, g, c, f, ci) for d, g, c, f, ci in JOGOS
+                 if (r := resultados.get((c, f))) and r[2] == "in"]
+if jogos_ao_vivo:
+    st.markdown('<div class="livebar">Ao vivo agora</div>', unsafe_allow_html=True)
+    cards_live = "".join(
+        card_jogo_html(d, g, c, f, ci, resultados.get((c, f)), hoje, horarios, detalhes.get((c, f)))
+        for d, g, c, f, ci in jogos_ao_vivo
+    )
+    st.markdown(f'<div class="day-grid">{cards_live}</div>', unsafe_allow_html=True)
 
 tab_jogos, tab_grupos = st.tabs(["📅 Jogos por dia", "📊 Classificação dos grupos"])
 
@@ -710,7 +737,8 @@ with tab_jogos:
             unsafe_allow_html=True,
         )
         cards = "".join(
-            card_jogo_html(d, g, casa, fora, cidade, resultados.get((casa, fora)), hoje, horarios)
+            card_jogo_html(d, g, casa, fora, cidade, resultados.get((casa, fora)),
+                           hoje, horarios, detalhes.get((casa, fora)))
             for g, casa, fora, cidade in jogos_dia
         )
         st.markdown(f'<div class="day-grid">{cards}</div>', unsafe_allow_html=True)
