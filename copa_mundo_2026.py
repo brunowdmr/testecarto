@@ -260,55 +260,35 @@ SEDE_PAIS = {
     "Kansas City": "🇺🇸 EUA", "Seattle": "🇺🇸 EUA",
 }
 
-# Seleções com maior apelo (usadas para escolher o "jogo do dia" da Globo)
-GRANDES = {
-    "Brasil", "Argentina", "França", "Espanha", "Inglaterra", "Portugal",
-    "Alemanha", "Holanda", "Bélgica", "Uruguai", "México", "EUA", "Croácia",
+# Canais REAIS por jogo (além da CazéTV, que transmite TODOS os 104 jogos).
+# Fonte: grade divulgada pelas emissoras/sites de "onde assistir", dia a dia.
+# Para adicionar um dia novo, basta inserir os confrontos com seus canais aqui.
+CANAIS_TV = {
+    # Jogos do Brasil (sempre em Globo + SporTV na TV)
+    ("Brasil", "Marrocos"): ["Globo", "SporTV"],
+    ("Brasil", "Haiti"): ["Globo", "SporTV"],
+    ("Escócia", "Brasil"): ["Globo", "SporTV"],
+    # 14/06 (fonte: Exame)
+    ("Alemanha", "Curaçao"): [],                       # só CazéTV
+    ("Holanda", "Japão"): ["Globo", "SBT", "SporTV"],
+    ("Costa do Marfim", "Equador"): ["Globo", "SporTV"],
+    ("Suécia", "Tunísia"): ["Globo", "SporTV"],
 }
 
-# Ordem de prestígio para escolher o jogo principal de cada dia (TV aberta)
-_PRESTIGIO_ORDEM = [
-    "Brasil", "Argentina", "França", "Espanha", "Inglaterra", "Portugal",
-    "Alemanha", "Holanda", "Bélgica", "Uruguai", "Croácia", "Colômbia",
-    "México", "EUA", "Marrocos", "Japão", "Senegal", "Suíça", "Equador",
-    "Coreia do Sul", "Catar", "Austrália", "Noruega", "Egito", "Costa do Marfim",
-]
-_PRESTIGIO = {t: len(_PRESTIGIO_ORDEM) - i for i, t in enumerate(_PRESTIGIO_ORDEM)}
-
-
-def _prestigio_jogo(casa, fora):
-    return _PRESTIGIO.get(casa, 0) + _PRESTIGIO.get(fora, 0)
-
-
-# Jogos que vão à Globo (TV aberta): a Seleção + o jogo principal de cada dia
-def _calcular_jogos_globo():
-    globo = set()
-    por_dia = {}
-    for d, g, c, f, ci in JOGOS:
-        por_dia.setdefault(d, []).append((c, f))
-        if "Brasil" in (c, f):
-            globo.add((c, f))
-    for d, confrontos in por_dia.items():
-        globo.add(max(confrontos, key=lambda cf: _prestigio_jogo(*cf)))
-    return globo
-
-
-GLOBO_GAMES = _calcular_jogos_globo()
+# Ordem de exibição dos canais (TV aberta primeiro, depois fechada e streaming)
+ORDEM_CANAIS = ["Globo", "SBT", "SporTV", "Globoplay", "CazéTV"]
 
 
 def canais_do_jogo(casa: str, fora: str):
-    """Retorna os canais/plataformas que transmitem o jogo, em ordem de TV.
+    """Canais que transmitem o jogo no Brasil.
 
-    - CazéTV (YouTube, grátis): todos os 104 jogos
-    - SporTV (TV fechada): todos os jogos
-    - Globo (TV aberta): jogos da Seleção + o jogo principal de cada dia
+    A CazéTV (YouTube, grátis) transmite todos os 104 jogos, então sempre entra.
+    Os demais canais vêm de CANAIS_TV (grade real divulgada por jogo); para os
+    jogos sem grade confirmada, mostra apenas a CazéTV.
     """
-    canais = []
-    if (casa, fora) in GLOBO_GAMES:
-        canais.append("Globo")
-    canais.append("SporTV")
-    canais.append("CazéTV")
-    return canais
+    canais = set(CANAIS_TV.get((casa, fora), []))
+    canais.add("CazéTV")
+    return [c for c in ORDEM_CANAIS if c in canais]
 
 
 # ----------------------------------------------------------------------------
@@ -597,6 +577,8 @@ CSS = """
 .chip-globo{background:rgba(34,211,238,.16); color:var(--cyan);}
 .chip-sportv{background:rgba(124,92,255,.20); color:#bca9ff;}
 .chip-caze{background:rgba(34,224,122,.16); color:var(--green);}
+.chip-sbt{background:rgba(255,59,92,.16); color:#ff8aa0;}
+.chip-globoplay{background:rgba(255,176,32,.16); color:var(--amber);}
 /* Standings */
 .group-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(345px,1fr)); gap:16px;}
 .grp{background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line); border-radius:18px; overflow:hidden;}
@@ -624,7 +606,8 @@ CSS = """
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
-CHIP_CLS = {"Globo": "chip-globo", "SporTV": "chip-sportv", "CazéTV": "chip-caze"}
+CHIP_CLS = {"Globo": "chip-globo", "SporTV": "chip-sportv", "CazéTV": "chip-caze",
+            "SBT": "chip-sbt", "Globoplay": "chip-globoplay"}
 
 
 def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios, detalhe=None):
