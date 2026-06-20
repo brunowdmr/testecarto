@@ -640,7 +640,7 @@ def card_jogo_html(d, g, casa, fora, cidade, res, hoje, horarios, detalhe=None):
                     for c in canais_do_jogo(casa, fora))
     sede = SEDE_PAIS.get(cidade, "")
     url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(
-        f"{casa} x {fora} copa do mundo 2026 ao vivo")
+        f"{casa} x {fora} copa do mundo onde assistir ao vivo")
     return (
         f'<a class="match-link" href="{url}" target="_blank" rel="noopener">'
         f'<div class="match {live}">'
@@ -745,13 +745,37 @@ tab_jogos, tab_grupos = st.tabs(["📅 Jogos por dia", "📊 Classificação dos
 # Aba 1 — Jogos por dia
 # ----------------------------------------------------------------------------
 with tab_jogos:
-    c1, c2 = st.columns([2, 1])
-    grupos_opt = ["Todos"] + [f"Grupo {g}" for g in GRUPOS]
-    grupo_sel = c1.selectbox("Filtrar por grupo:", grupos_opt)
-    so_brasil = c2.toggle("Apenas jogos do Brasil 🇧🇷", value=False)
-
     datas = sorted({d for d, *_ in JOGOS})
+    hoje_str = hoje.strftime("%Y-%m-%d")
+
+    # Opções do filtro de dia (com rótulo amigável)
+    rotulos = {}
+    opcoes_dia = ["📅 Todos os dias"]
     for d in datas:
+        rot = data_formatada(d) + (" 🔴 HOJE" if d == hoje_str else "")
+        rotulos[rot] = d
+        opcoes_dia.append(rot)
+    # Padrão: começa no dia de hoje (traz os jogos do dia para a frente)
+    rot_hoje = next((r for r, dd in rotulos.items() if dd == hoje_str), "📅 Todos os dias")
+    idx_hoje = opcoes_dia.index(rot_hoje)
+
+    c1, c2, c3 = st.columns([2, 2, 1])
+    dia_sel = c1.selectbox("Dia:", opcoes_dia, index=idx_hoje)
+    grupo_sel = c2.selectbox("Grupo:", ["Todos"] + [f"Grupo {g}" for g in GRUPOS])
+    so_brasil = c3.toggle("Só Brasil 🇧🇷", value=False)
+
+    # Ordem de exibição: hoje primeiro, depois os próximos, depois os já passados
+    def _ordem_dia(d):
+        if d == hoje_str:
+            return (0, d)
+        return (1, d) if d > hoje_str else (2, d)
+
+    if dia_sel != "📅 Todos os dias":
+        datas_mostrar = [rotulos[dia_sel]]
+    else:
+        datas_mostrar = sorted(datas, key=_ordem_dia)
+
+    for d in datas_mostrar:
         jogos_dia = []
         for data, g, casa, fora, cidade in JOGOS:
             if data != d:
