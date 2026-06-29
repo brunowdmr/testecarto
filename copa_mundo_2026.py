@@ -879,7 +879,7 @@ if jogos_ao_vivo:
     st.markdown(f'<div class="day-grid">{cards_live}</div>', unsafe_allow_html=True)
 
 tab_jogos, tab_grupos, tab_mata = st.tabs(
-    ["📅 Jogos por dia", "📊 Classificação dos grupos", "🏆 Mata-mata"])
+    ["📅 Jogos", "📊 Grupos", "🏆 Mata-mata"])
 
 # ----------------------------------------------------------------------------
 # Aba 1 — Jogos por dia
