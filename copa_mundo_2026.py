@@ -580,6 +580,9 @@ def data_formatada(data_str: str) -> str:
 # ----------------------------------------------------------------------------
 st.sidebar.title("⚙️ Opções")
 auto = st.sidebar.toggle("Atualização automática (30s)", value=True)
+mostrar_grupos = st.sidebar.toggle("Mostrar fase de grupos", value=False,
+                                   help="A fase de grupos já foi encerrada. Ative para ver "
+                                        "novamente os jogos e a classificação dos grupos.")
 usar_espn = st.sidebar.toggle("Placares ao vivo (feed ESPN)", value=True,
                               help="Busca placares e jogos ao vivo no feed público da ESPN "
                                    "(os mesmos dados exibidos pelo Google). Se a rede falhar, "
@@ -878,13 +881,10 @@ if jogos_ao_vivo:
     )
     st.markdown(f'<div class="day-grid">{cards_live}</div>', unsafe_allow_html=True)
 
-tab_jogos, tab_grupos, tab_mata = st.tabs(
-    ["📅 Jogos", "📊 Grupos", "🏆 Mata-mata"])
-
 # ----------------------------------------------------------------------------
-# Aba 1 — Jogos por dia
+# Aba 1 — Jogos por dia (fase de grupos)
 # ----------------------------------------------------------------------------
-with tab_jogos:
+def render_jogos():
     datas = sorted({d for d, *_ in JOGOS})
     hoje_str = hoje.strftime("%Y-%m-%d")
 
@@ -946,7 +946,7 @@ with tab_jogos:
 # ----------------------------------------------------------------------------
 # Aba 2 — Classificação dos grupos
 # ----------------------------------------------------------------------------
-with tab_grupos:
+def render_grupos():
     st.markdown(
         '<div class="legend">Classificam-se os <b>2 primeiros</b> de cada grupo + os '
         '<i>8 melhores 3º colocados</i>. &nbsp;Critérios: Pontos → Saldo (SG) → Gols pró.</div>',
@@ -955,10 +955,11 @@ with tab_grupos:
     tabelas = "".join(grupo_tabela_html(g, resultados) for g in GRUPOS)
     st.markdown(f'<div class="group-grid">{tabelas}</div>', unsafe_allow_html=True)
 
+
 # ----------------------------------------------------------------------------
 # Aba 3 — Mata-mata
 # ----------------------------------------------------------------------------
-with tab_mata:
+def render_mata():
     st.markdown(
         '<div class="legend">Caminho do título: <b>Rodada de 32</b> → Oitavas → Quartas → '
         'Semifinais → Final (28/06 a 19/07). Os confrontos se preenchem conforme os '
@@ -969,19 +970,34 @@ with tab_mata:
     if not mata:
         st.info("🏆 O chaveamento será preenchido automaticamente quando a fase de grupos "
                 "terminar (a partir de 28/06).")
-    else:
-        for fase in FASES_ORDEM:
-            jogos_fase = [e for e in mata if e["fase"] == fase]
-            if not jogos_fase:
-                continue
-            jogos_fase.sort(key=lambda e: (e["data"], e["hora"]))
-            st.markdown(
-                f'<div class="dayhead"><span class="dot"></span>'
-                f'<span class="d">{fase}</span></div>',
-                unsafe_allow_html=True,
-            )
-            cards_ko = "".join(card_mata_html(e, hoje) for e in jogos_fase)
-            st.markdown(f'<div class="day-grid">{cards_ko}</div>', unsafe_allow_html=True)
+        return
+    for fase in FASES_ORDEM:
+        jogos_fase = [e for e in mata if e["fase"] == fase]
+        if not jogos_fase:
+            continue
+        jogos_fase.sort(key=lambda e: (e["data"], e["hora"]))
+        st.markdown(
+            f'<div class="dayhead"><span class="dot"></span>'
+            f'<span class="d">{fase}</span></div>',
+            unsafe_allow_html=True,
+        )
+        cards_ko = "".join(card_mata_html(e, hoje) for e in jogos_fase)
+        st.markdown(f'<div class="day-grid">{cards_ko}</div>', unsafe_allow_html=True)
+
+
+# ----------------------------------------------------------------------------
+# Navegação: mata-mata em destaque; fase de grupos só quando ativada
+# ----------------------------------------------------------------------------
+if mostrar_grupos:
+    tab_mata, tab_jogos, tab_grupos = st.tabs(["🏆 Mata-mata", "📅 Jogos", "📊 Grupos"])
+    with tab_mata:
+        render_mata()
+    with tab_jogos:
+        render_jogos()
+    with tab_grupos:
+        render_grupos()
+else:
+    render_mata()
 
 # ----------------------------------------------------------------------------
 # Atualização automática
