@@ -12,6 +12,7 @@ Página com atualização online dos jogos da Copa do Mundo FIFA 2026 (EUA/Canad
 - **Jogos separados por dia**, com horário de Brasília e o(s) **canal(is)** que transmitem cada partida
 - **Resultados** dos jogos (inclusive jogos **ao vivo**)
 - **Classificação** automática dos 12 grupos (Pontos → Saldo de gols → Gols pró)
+- **Mata-mata** (Rodada de 32 → Oitavas → Quartas → Semis → Final) que se preenche sozinho conforme os times avançam
 - **Placares ao vivo** via feed público da ESPN (os mesmos dados dos cards do Google), com atualização automática a cada 30s
 
 Para rodar localmente:

@@ -401,6 +401,103 @@ def obter_dados(usar_espn: bool):
     return resultados, horarios, detalhes
 
 
+# ----------------------------------------------------------------------------
+# Mata-mata (fases finais) — dados puxados do feed da ESPN
+# ----------------------------------------------------------------------------
+FASES_ORDEM = ["Rodada de 32", "Oitavas de final", "Quartas de final",
+               "Semifinais", "Disputa de 3º lugar", "Final"]
+
+
+def _ko_datas():
+    d, fim, out = date(2026, 6, 28), date(2026, 7, 19), []
+    while d <= fim:
+        out.append(d.isoformat())
+        d += timedelta(days=1)
+    return out
+
+
+KO_DATAS = _ko_datas()
+
+
+def _fase_por_data(d: str) -> str:
+    if d <= "2026-07-03":
+        return "Rodada de 32"
+    if d <= "2026-07-07":
+        return "Oitavas de final"
+    if d <= "2026-07-11":
+        return "Quartas de final"
+    if d <= "2026-07-15":
+        return "Semifinais"
+    if d == "2026-07-18":
+        return "Disputa de 3º lugar"
+    return "Final"
+
+
+def traduz_time(nome_en: str):
+    """Converte o nome vindo da ESPN em (bandeira, nome PT).
+
+    Times definidos viram nome em português com bandeira; quando ainda é um
+    placeholder (ex.: 'Round of 32 3 Winner'), vira um rótulo traduzido sem bandeira.
+    """
+    pt = EN_PARA_PT.get(_strip(nome_en))
+    if pt:
+        return flag(pt), pt
+    t = nome_en
+    for a, b in [("Round of 32", "32-avos"), ("Round of 16", "Oitavas"),
+                 ("Quarterfinal", "Quartas"), ("Semifinal", "Semi"),
+                 ("Third Place", "3º lugar"), ("Group", "Grupo"),
+                 ("Winner", "Vencedor"), ("Loser", "Perdedor")]:
+        t = t.replace(a, b)
+    t = " ".join(t.split())
+    for w in ("Vencedor", "Perdedor"):
+        if t.endswith(w):
+            t = f"{w} {t[:-len(w)].strip()}"
+    return "⬜", t or nome_en
+
+
+@st.cache_data(ttl=300, show_spinner="Carregando mata-mata...")
+def buscar_mata_mata(_minuto):
+    """Retorna a lista de jogos do mata-mata a partir do feed da ESPN.
+
+    Cada item: dict(fase, data, hora, casa, fora, gc, gf, estado, detalhe, sede).
+    Os times indefinidos aparecem como placeholders ('Vencedor Semi 1' etc.).
+    """
+    jogos = []
+    for d in KO_DATAS:
+        url = ESPN_URL.format(data=d.replace("-", ""))
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                dados = json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            continue
+        for ev in dados.get("events", []):
+            try:
+                comp = ev["competitions"][0]
+                cs = comp["competitors"]
+                h = next(c for c in cs if c["homeAway"] == "home")
+                a = next(c for c in cs if c["homeAway"] == "away")
+                estado = ev["status"]["type"]["state"]
+                dt = datetime.fromisoformat(ev["date"].replace("Z", "+00:00")).astimezone(BR_TZ)
+                gc, gf = h.get("score"), a.get("score")
+                tem = estado in ("in", "post") and gc not in (None, "") and gf not in (None, "")
+                jogos.append({
+                    "fase": _fase_por_data(d),
+                    "data": d,
+                    "hora": f"{dt:%Hh%M}",
+                    "casa": h["team"]["displayName"],
+                    "fora": a["team"]["displayName"],
+                    "gc": int(gc) if tem else None,
+                    "gf": int(gf) if tem else None,
+                    "estado": estado,
+                    "detalhe": (ev["status"].get("displayClock") or "").strip() if estado == "in" else "",
+                    "sede": (comp.get("venue") or {}).get("fullName", ""),
+                })
+            except Exception:
+                continue
+    return jogos
+
+
 def calcular_classificacao(grupo: str, resultados: dict) -> pd.DataFrame:
     """Calcula a classificação do grupo (somente jogos ENCERRADOS contam pontos)."""
     tab = {t: dict(P=0, J=0, V=0, E=0, D=0, GP=0, GC=0) for t in GRUPOS[grupo]}
@@ -676,6 +773,48 @@ def grupo_tabela_html(g, resultados):
     )
 
 
+def card_mata_html(ev, hoje):
+    estado = ev["estado"]
+    dt = datetime.strptime(ev["data"], "%Y-%m-%d").date()
+    if estado == "in":
+        stxt, scls = (f"🔴 {ev['detalhe']}" if ev["detalhe"] else "🔴 AO VIVO"), "s-live"
+    elif estado == "post":
+        stxt, scls = "ENCERRADO", "s-post"
+    elif dt == hoje:
+        stxt, scls = "HOJE", "s-today"
+    elif dt < hoje:
+        stxt, scls = "AGUARDANDO", "s-pre"
+    else:
+        stxt, scls = "AGENDADO", "s-pre"
+
+    live = "live" if estado == "in" else ""
+    fc, nc = traduz_time(ev["casa"])
+    ff, nf = traduz_time(ev["fora"])
+    if ev["gc"] is not None:
+        score = f'<div class="m-score {live}">{ev["gc"]}<span class="sep">:</span>{ev["gf"]}</div>'
+    else:
+        score = '<div class="m-score"><span class="vs">VS</span></div>'
+
+    data_curta = f'{ev["data"][8:10]}/{ev["data"][5:7]}'
+    url = "https://www.google.com/search?q=" + urllib.parse.quote_plus(
+        f"{nc} x {nf} copa do mundo onde assistir ao vivo")
+    chips = "".join(f'<span class="chip {CHIP_CLS.get(c, "chip")}">{c}</span>'
+                    for c in ["Globo", "SporTV", "CazéTV"])
+    return (
+        f'<a class="match-link" href="{url}" target="_blank" rel="noopener">'
+        f'<div class="match {live}">'
+        f'<div class="m-head"><span>🗓️ {data_curta} · {ev["hora"]}</span>'
+        f'<span class="m-status {scls}">{stxt}</span></div>'
+        f'<div class="m-body">'
+        f'<div class="m-team"><span class="m-flag">{fc}</span><span class="m-name">{nc}</span></div>'
+        f'{score}'
+        f'<div class="m-team"><span class="m-flag">{ff}</span><span class="m-name">{nf}</span></div>'
+        f'</div>'
+        f'<div class="m-foot"><span class="m-venue">📍 {ev["sede"]}</span>'
+        f'<span>{chips}</span></div></div></a>'
+    )
+
+
 # ----------------------------------------------------------------------------
 # Cabeçalho
 # ----------------------------------------------------------------------------
@@ -739,7 +878,8 @@ if jogos_ao_vivo:
     )
     st.markdown(f'<div class="day-grid">{cards_live}</div>', unsafe_allow_html=True)
 
-tab_jogos, tab_grupos = st.tabs(["📅 Jogos por dia", "📊 Classificação dos grupos"])
+tab_jogos, tab_grupos, tab_mata = st.tabs(
+    ["📅 Jogos por dia", "📊 Classificação dos grupos", "🏆 Mata-mata"])
 
 # ----------------------------------------------------------------------------
 # Aba 1 — Jogos por dia
@@ -814,6 +954,34 @@ with tab_grupos:
     )
     tabelas = "".join(grupo_tabela_html(g, resultados) for g in GRUPOS)
     st.markdown(f'<div class="group-grid">{tabelas}</div>', unsafe_allow_html=True)
+
+# ----------------------------------------------------------------------------
+# Aba 3 — Mata-mata
+# ----------------------------------------------------------------------------
+with tab_mata:
+    st.markdown(
+        '<div class="legend">Caminho do título: <b>Rodada de 32</b> → Oitavas → Quartas → '
+        'Semifinais → Final (28/06 a 19/07). Os confrontos se preenchem conforme os '
+        'times avançam.</div>',
+        unsafe_allow_html=True,
+    )
+    mata = buscar_mata_mata(agora.strftime("%Y%m%d%H")) if usar_espn else []
+    if not mata:
+        st.info("🏆 O chaveamento será preenchido automaticamente quando a fase de grupos "
+                "terminar (a partir de 28/06).")
+    else:
+        for fase in FASES_ORDEM:
+            jogos_fase = [e for e in mata if e["fase"] == fase]
+            if not jogos_fase:
+                continue
+            jogos_fase.sort(key=lambda e: (e["data"], e["hora"]))
+            st.markdown(
+                f'<div class="dayhead"><span class="dot"></span>'
+                f'<span class="d">{fase}</span></div>',
+                unsafe_allow_html=True,
+            )
+            cards_ko = "".join(card_mata_html(e, hoje) for e in jogos_fase)
+            st.markdown(f'<div class="day-grid">{cards_ko}</div>', unsafe_allow_html=True)
 
 # ----------------------------------------------------------------------------
 # Atualização automática
